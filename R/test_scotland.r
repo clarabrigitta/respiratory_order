@@ -1,5 +1,5 @@
-# load data
-data <- read_csv("data/respiratory_scot_20250917.csv") %>% 
+# load Scottish data by pathogen, marking epidemic onset ----
+data <- read_csv("inst/data/respiratory_scot_20250917.csv") %>% 
   mutate(WeekBeginning = as.Date(as.character(WeekBeginning), format = "%Y%m%d")) %>% 
   arrange(Pathogen, WeekBeginning) %>%
   group_by(Pathogen) %>%
@@ -41,48 +41,18 @@ data <- read_csv("data/respiratory_scot_20250917.csv") %>%
                           "Influenza - Type A(H3)",
                           "Mycoplasma pneumoniae" ))
 
-# load data by age
-data <- read_csv("data/cases_all_respiratory_pathogens_by_agegroup_sex_20251008.csv") %>% 
-  filter(Sex == "Total", !AgeGroup %in% c("Total", "Unknown"), !Pathogen %in% c("Influenza (All)", "COVID-19")) %>% 
-  mutate(WeekBeginning = as.Date(as.character(WeekBeginning), format = "%Y%m%d")) 
-
-c("<1", "1 to 4", "5 to 14", "15 to 44", "45 to 64", "65 to 74", "75+")
-ggplot() +
-  geom_line(data = data %>% filter(AgeGroup %in% c("<1", "1 to 4", "5 to 14"),
-                                   ISOyear >= 2018 & ISOyear <= 2022), aes(x = WeekBeginning, y = NumberCasesPerWeek, colour = Pathogen)) +
-  scale_color_viridis(discrete = T, option = "D") +
-  theme_bw() +
-  facet_grid(~AgeGroup)
-
-subdata <- data %>% filter(AgeGroup %in% c("<1", "1 to 4", "5 to 14"),
-                               ISOyear >= 2018 & ISOyear <= 2022)
-
-  subplot(lapply(split(subdata, subdata$AgeGroup), function(df) {
-    plot_ly(
-      data = df,
-      x = ~WeekBeginning,
-      y = ~NumberCasesPerWeek,
-      legendgroup = ~Pathogen,
-      color = ~Pathogen,
-      colors = viridis(length(unique(df$Pathogen)), option = "D"),
-      type = 'scatter',
-      mode = 'lines',
-      showlegend = ifelse(unique(df$AgeGroup) == "<1", TRUE, FALSE)) %>%
-      layout(annotations = list(text = paste0(unique(df$AgeGroup)),
-                                x = 0.5, y = 1, xref = 'paper', yref = 'paper',
-                                showarrow = FALSE))}),
-    nrows = 1, shareY = TRUE, shareX = TRUE)
-
-# plot using ggplot
+# plot Scottish data by pathogen ----
+## ggplot
 ggplot(data) +
   geom_line(aes(x = WeekBeginning, y = NumberCasesPerWeek, colour = Pathogen)) +
   theme_bw() +
+  xlim(as.Date("2020-03-23"), as.Date("2021-03-16")) +
   annotate("rect",
            xmin = as.Date("2020-03-23"), xmax = as.Date("2021-03-16"),
            ymin = -Inf, ymax = Inf,
            alpha = 0.2, fill = "grey")
 
-# plot using plotly
+## plotly
 plot_ly() %>%
   add_trace(data = data, x = ~WeekBeginning, y = ~NumberCasesPerWeek, color = ~Pathogen,
             type = 'scatter', 
@@ -102,12 +72,18 @@ plot_ly() %>%
             mode = 'markers',
             marker = list(size = 7, symbol = 'square', line = list(width = 1, color = NA)),
             showlegend = FALSE) %>% 
-  add_trace(data = contacts_daily, x = ~date, y = ~mean_contacts,
+  # add_trace(data = contacts_daily, x = ~date, y = ~mean_contacts,
+  #           yaxis = "y2",
+  #           type = 'scatter', 
+  #           mode = 'lines',
+  #           color = 'contacts',
+  #           line = list(color='black')) %>% 
+  add_trace(data = out, x = ~date, y = ~inc,
             yaxis = "y2",
-            type = 'scatter', 
+            type = 'scatter',
             mode = 'lines',
-            color = 'contacts',
-            line = list(color='black')) %>% 
+            color = 'model',
+            line = list(color='black')) %>%
   layout(shapes = list(list(type = "rect",
                             x0 = as.Date("2020-03-23"),
                             x1 = as.Date("2021-03-16"),
@@ -118,4 +94,40 @@ plot_ly() %>%
                             opacity = 0.2,
                             line = list(width = 0))), template = "plotly_white", 
          yaxis2 = list(overlaying = "y",
-                       side = "right", range = c(0, 30)))
+                       side = "right", range = c(0, 100000)))
+
+# load Scottish data by pathogen and age ----
+data <- read_csv("inst/data/cases_all_respiratory_pathogens_by_agegroup_sex_20251008.csv") %>% 
+  filter(Sex == "Total", !AgeGroup %in% c("Total", "Unknown"), !Pathogen %in% c("Influenza (All)", "COVID-19")) %>% 
+  mutate(WeekBeginning = as.Date(as.character(WeekBeginning), format = "%Y%m%d")) 
+
+# c("<1", "1 to 4", "5 to 14", "15 to 44", "45 to 64", "65 to 74", "75+") # vector of age ranges
+
+# plot Scottish data by pathogen and age ----
+## ggplot
+ggplot() +
+  geom_line(data = data %>% filter(AgeGroup %in% c("<1", "1 to 4", "5 to 14"),
+                                   ISOyear >= 2020 & ISOyear <= 2021), aes(x = WeekBeginning, y = NumberCasesPerWeek, colour = Pathogen)) +
+  scale_color_viridis(discrete = T, option = "D") +
+  theme_bw() +
+  facet_grid(~AgeGroup)
+
+## plotly
+subdata <- data %>% filter(AgeGroup %in% c("<1", "1 to 4", "5 to 14"),
+                               ISOyear >= 2018 & ISOyear <= 2022)
+
+  subplot(lapply(split(subdata, subdata$AgeGroup), function(df) {
+    plot_ly(
+      data = df,
+      x = ~WeekBeginning,
+      y = ~NumberCasesPerWeek,
+      legendgroup = ~Pathogen,
+      color = ~Pathogen,
+      colors = viridis(length(unique(df$Pathogen)), option = "D"),
+      type = 'scatter',
+      mode = 'lines',
+      showlegend = ifelse(unique(df$AgeGroup) == "<1", TRUE, FALSE)) %>%
+      layout(annotations = list(text = paste0(unique(df$AgeGroup)),
+                                x = 0.5, y = 1, xref = 'paper', yref = 'paper',
+                                showarrow = FALSE))}),
+    nrows = 1, shareY = TRUE, shareX = TRUE)
