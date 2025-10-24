@@ -1,4 +1,5 @@
-comix <- read_csv("data/contact_matrices_9_periods.csv") %>% 
+# CoMix data (all ages, up to 2021) ----
+comix <- read_csv("inst/data/contact_matrices_9_periods.csv") %>% 
   group_by(Period, `Participant age`) %>%
   summarise(contacts = sum(`mean contacts`, na.rm = TRUE)) %>% 
   ungroup() %>% 
@@ -9,23 +10,6 @@ comix <- read_csv("data/contact_matrices_9_periods.csv") %>%
          period = factor(period, 
                          levels = c(1:9), 
                          labels = c("Lockdown 1", "Lockdown 1 easing", "Relaxed restrictions", "School reopening", "Lockdown 2", "Lockdown 2 easing", "Christmas", "Lockdown 3", "Lockdown 3 + schools")))
-
-comix_kids <- read_csv("data/contact_matrices_9_periods.csv") %>% 
-  group_by(Period, `Participant age`) %>%
-  summarise(contacts = sum(`mean contacts`, na.rm = TRUE)) %>% 
-  # filter(`Participant age` %in% c("0-4", "5-11", "12-17")) %>% 
-  mutate(`Participant age` = factor(`Participant age`, levels = c("0-4", "5-11", "12-17", "18-29", "30-39", "40-49", "50-59", "60-69", "70+"))) %>% 
-  rename(period = Period) %>% 
-  mutate(period = recode(period, 
-                         "1. Lockdown 1" = "Lockdown 1", 
-                         "2. Lockdown 1 easing" = "Lockdown 1 easing", 
-                         "3. Relaxed restrictions" = "Relaxed restrictions", 
-                         "4. School reopening" = "School reopening", 
-                         "5. Lockdown 2" = "Lockdown 2", 
-                         "6. Lockdown 2 easing" = "Lockdown 2 easing", 
-                         "7. Christmas" = "Christmas", 
-                         "8. Lockdown 3" = "Lockdown 3", 
-                         "9. Lockdown 3 + schools" = "Lockdown 3 + schools"))
 
 contacts_daily <- data.frame(date = seq(from = as.Date("23-03-2020", format = "%d-%m-%Y"), to   = as.Date("16-03-2021", format = "%d-%m-%Y"), by   = "day")) %>% 
   mutate(time = as.numeric(1:nrow(.))) %>% 
@@ -43,6 +27,30 @@ contacts_daily <- data.frame(date = seq(from = as.Date("23-03-2020", format = "%
                          levels = c(1:9), 
                          labels = c("Lockdown 1", "Lockdown 1 easing", "Reduced restrictions", "Schools open", "Lockdown 2", "Lockdown 2 easing", "Christmas", "Lockdown 3", "Lockdown 3 with schools open"))) %>% 
   left_join(comix)
+
+ggplot() +
+  geom_line(data = contacts_daily, aes(x = date, y = mean_contacts)) +
+  geom_line(data = data %>% filter(!Pathogen %in% c("Rhinovirus", "Adenovirus")), aes(x = WeekBeginning, y = NumberCasesPerWeek, colour = Pathogen)) +
+  theme_bw()
+
+# CoMix data (age-stratified, up to 2021) ----
+comix_kids <- read_csv("data/contact_matrices_9_periods.csv") %>% 
+  group_by(Period, `Participant age`) %>%
+  summarise(contacts = sum(`mean contacts`, na.rm = TRUE)) %>% 
+  # filter(`Participant age` %in% c("0-4", "5-11", "12-17")) %>% 
+  mutate(`Participant age` = factor(`Participant age`, levels = c("0-4", "5-11", "12-17", "18-29", "30-39", "40-49", "50-59", "60-69", "70+"))) %>% 
+  rename(period = Period) %>% 
+  mutate(period = recode(period, 
+                         "1. Lockdown 1" = "Lockdown 1", 
+                         "2. Lockdown 1 easing" = "Lockdown 1 easing", 
+                         "3. Relaxed restrictions" = "Relaxed restrictions", 
+                         "4. School reopening" = "School reopening", 
+                         "5. Lockdown 2" = "Lockdown 2", 
+                         "6. Lockdown 2 easing" = "Lockdown 2 easing", 
+                         "7. Christmas" = "Christmas", 
+                         "8. Lockdown 3" = "Lockdown 3", 
+                         "9. Lockdown 3 + schools" = "Lockdown 3 + schools"))
+
 
 contacts_daily_kids <- data.frame(date = seq(from = as.Date("23-03-2020", format = "%d-%m-%Y"), to   = as.Date("16-03-2021", format = "%d-%m-%Y"), by   = "day")) %>% 
   mutate(time = as.numeric(1:nrow(.))) %>% 
@@ -62,11 +70,41 @@ contacts_daily_kids <- data.frame(date = seq(from = as.Date("23-03-2020", format
   left_join(comix_kids)
 
 ggplot() +
-  geom_line(data = contacts_daily, aes(x = date, y = mean_contacts)) +
-  geom_line(data = data %>% filter(!Pathogen %in% c("Rhinovirus", "Adenovirus")), aes(x = WeekBeginning, y = NumberCasesPerWeek, colour = Pathogen)) +
-  theme_bw()
-
-ggplot() +
   geom_line(data = contacts_daily_kids, aes(x = date, y = contacts, colour = `Participant age`)) +
   scale_color_viridis(discrete = T, option = "D") +
   theme_bw()
+
+# CoMix data (all ages, up to 2022) ----
+
+survey <- read_csv("inst/data/CoMix_uk_sday.csv") %>% 
+  select(-X)
+
+participants <- read_csv("inst/data/CoMix_uk_participant_common.csv") %>% 
+  select(part_id, part_age)
+
+contacts <- read_csv("inst/data/CoMix_uk_contact_common.csv") %>% 
+  group_by(part_id) %>% 
+  summarise(count = n())
+
+combined <- survey %>% 
+  left_join(participants, join_by(part_id)) %>% 
+  left_join(contacts, join_by(part_id)) %>% 
+  mutate(count = replace_na(count, 0),
+         sday_id = as.Date(sday_id, format = "%Y.%m.%d"),
+         period = case_when(
+           sday_id >= as.Date("23-03-2020", format = "%d-%m-%Y") & sday_id <= as.Date("03-06-2020", format = "%d-%m-%Y") ~ 1,
+           sday_id >= as.Date("04-06-2020", format = "%d-%m-%Y") & sday_id <= as.Date("29-07-2020", format = "%d-%m-%Y") ~ 2,
+           sday_id >= as.Date("30-07-2020", format = "%d-%m-%Y") & sday_id <= as.Date("03-09-2020", format = "%d-%m-%Y") ~ 3,
+           sday_id >= as.Date("04-09-2020", format = "%d-%m-%Y") & sday_id <= as.Date("26-10-2020", format = "%d-%m-%Y") ~ 4,
+           sday_id >= as.Date("27-10-2020", format = "%d-%m-%Y") & sday_id <= as.Date("02-12-2020", format = "%d-%m-%Y") ~ 5, # actually 05-11-2025
+           sday_id >= as.Date("03-12-2020", format = "%d-%m-%Y") & sday_id <= as.Date("19-12-2020", format = "%d-%m-%Y") ~ 6,
+           sday_id >= as.Date("20-12-2020", format = "%d-%m-%Y") & sday_id <= as.Date("02-01-2021", format = "%d-%m-%Y") ~ 7,
+           sday_id >= as.Date("03-01-2021", format = "%d-%m-%Y") & sday_id <= as.Date("08-03-2021", format = "%d-%m-%Y") ~ 8, # actually 05-01-2025
+           sday_id >= as.Date("09-03-2021", format = "%d-%m-%Y") & sday_id <= as.Date("16-03-2021", format = "%d-%m-%Y") ~ 9,
+           TRUE ~ 10)) %>% 
+  group_by(period) %>% 
+  summarise (mean_contacts = mean(count, na.rm = TRUE)) %>% 
+  mutate(period = factor(period, 
+                         levels = c(1:10), 
+                         labels = c("Lockdown 1", "Lockdown 1 easing", "Relaxed restrictions", "School reopening", "Lockdown 2", "Lockdown 2 easing", "Christmas", "Lockdown 3", "Lockdown 3 + schools", "Post lockdown"))) 
+         
