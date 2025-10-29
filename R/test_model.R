@@ -31,7 +31,7 @@ dates <- data.frame(date = seq(as.Date("23-03-2020", format = "%d-%m-%Y"), as.Da
 ## SEIRS model
 seirs <- function(t, y, parms) {
     with(as.list(c(y, parms)), {
-      beta <- c_t(t)* 0.25 # trying with 1/4 probability of infection
+      beta <- c_t(t)* p_inf # trying with 1/4 probability of infection
       
       dS <- - beta * S * (I/N) + omega * R
       dE <-  beta * S * (I/N) - sigma * E
@@ -45,20 +45,22 @@ seirs <- function(t, y, parms) {
   }
 
 ### duration of periods
-inc_period <- 2
-inf_period <- 2
-imm_period <- 365
+inc_period <- 4.98
+inf_period <- 6.16
+imm_period <- 358.9
 
 ### rates 
 sigma <- 1 / inc_period # rate from E to I
 gamma <- 1 / inf_period # rate from I to R
 omega <- 1 / imm_period # rate from R to S
 
+p_inf <- 0.0972
+
 ### starting population
 N <- 5500000
-I0 <- 5
+I0 <- 1
 E0 <- 0
-R0 <- 0
+R0 <- 1000
 S0 <- N - I0 - E0 - R0
 y0 <- c(S = S0, E = E0, I = I0, R = R0)
 
@@ -66,7 +68,7 @@ y0 <- c(S = S0, E = E0, I = I0, R = R0)
 times <- seq(0, 709, by = 1)
 
 ## run model
-out <- ode(y = y0, times = times, func = seirs, parms = list(N = N, sigma = sigma, gamma = gamma, omega = omega))
+out <- ode(y = y0, times = times, func = seirs, parms = list(N = N, sigma = sigma, gamma = gamma, omega = omega, p_inf = p_inf))
 
 ## aggregate to weekly data
 out <- as.data.frame(out) %>% 
