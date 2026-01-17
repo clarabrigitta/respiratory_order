@@ -86,11 +86,31 @@ contacts <- read_csv("inst/data/CoMix_uk_contact_common.csv") %>%
   group_by(part_id) %>% 
   summarise(count = n())
 
+date_period <- data.frame(date = seq(from = as.Date("23-03-2020", format = "%d-%m-%Y"), to   = as.Date("02-03-2022", format = "%d-%m-%Y"), by   = "day")) %>% 
+  mutate(time = as.numeric(1:nrow(.)),
+         mmyyyy = format(date, "%m/%Y")) %>% 
+  mutate(period = case_when(
+    date >= as.Date("23-03-2020", format = "%d-%m-%Y") & date <= as.Date("03-06-2020", format = "%d-%m-%Y") ~ 1,
+    date >= as.Date("04-06-2020", format = "%d-%m-%Y") & date <= as.Date("29-07-2020", format = "%d-%m-%Y") ~ 2,
+    date >= as.Date("30-07-2020", format = "%d-%m-%Y") & date <= as.Date("03-09-2020", format = "%d-%m-%Y") ~ 3,
+    date >= as.Date("04-09-2020", format = "%d-%m-%Y") & date <= as.Date("26-10-2020", format = "%d-%m-%Y") ~ 4,
+    date >= as.Date("27-10-2020", format = "%d-%m-%Y") & date <= as.Date("02-12-2020", format = "%d-%m-%Y") ~ 5, # actually 05-11-2025
+    date >= as.Date("03-12-2020", format = "%d-%m-%Y") & date <= as.Date("19-12-2020", format = "%d-%m-%Y") ~ 6,
+    date >= as.Date("20-12-2020", format = "%d-%m-%Y") & date <= as.Date("02-01-2021", format = "%d-%m-%Y") ~ 7,
+    date >= as.Date("03-01-2021", format = "%d-%m-%Y") & date <= as.Date("08-03-2021", format = "%d-%m-%Y") ~ 8, # actually 05-01-2025
+    date >= as.Date("09-03-2021", format = "%d-%m-%Y") & date <= as.Date("16-03-2021", format = "%d-%m-%Y") ~ 9,
+    TRUE ~ 10)) %>% 
+  mutate(period = factor(period,
+                         levels = c(1:10), 
+                         labels = c("Lockdown 1", "Lockdown 1 easing", "Relaxed restrictions", "School reopening", "Lockdown 2", "Lockdown 2 easing", "Christmas", "Lockdown 3", "Lockdown 3 + schools", "Post lockdown")))
+
 combined <- survey %>% 
   left_join(participants, join_by(part_id)) %>% 
   left_join(contacts, join_by(part_id)) %>% 
   mutate(count = replace_na(count, 0),
          sday_id = as.Date(sday_id, format = "%Y.%m.%d"),
+         # mmyyyy = format(sday_id, "%m/%Y"),
+         mmyyyy = as.yearmon(sday_id),
          period = case_when(
            sday_id >= as.Date("23-03-2020", format = "%d-%m-%Y") & sday_id <= as.Date("03-06-2020", format = "%d-%m-%Y") ~ 1,
            sday_id >= as.Date("04-06-2020", format = "%d-%m-%Y") & sday_id <= as.Date("29-07-2020", format = "%d-%m-%Y") ~ 2,
@@ -102,9 +122,131 @@ combined <- survey %>%
            sday_id >= as.Date("03-01-2021", format = "%d-%m-%Y") & sday_id <= as.Date("08-03-2021", format = "%d-%m-%Y") ~ 8, # actually 05-01-2025
            sday_id >= as.Date("09-03-2021", format = "%d-%m-%Y") & sday_id <= as.Date("16-03-2021", format = "%d-%m-%Y") ~ 9,
            TRUE ~ 10)) %>% 
-  group_by(period) %>% 
+  # filter(sday_id < as.Date("31-03-2021", format = "%d-%m-%Y")) %>% 
+  group_by(mmyyyy) %>% 
   summarise (mean_contacts = mean(count, na.rm = TRUE)) %>% 
-  mutate(period = factor(period, 
-                         levels = c(1:10), 
-                         labels = c("Lockdown 1", "Lockdown 1 easing", "Relaxed restrictions", "School reopening", "Lockdown 2", "Lockdown 2 easing", "Christmas", "Lockdown 3", "Lockdown 3 + schools", "Post lockdown"))) 
-         
+  mutate(scaled = (mean_contacts - min(mean_contacts))/(max(mean_contacts) - min(mean_contacts))) %>%
+  # mutate(period = factor(period, 
+  #                        levels = c(1:10), 
+  #                        labels = c("Lockdown 1", "Lockdown 1 easing", "Relaxed restrictions", "School reopening", "Lockdown 2", "Lockdown 2 easing", "Christmas", "Lockdown 3", "Lockdown 3 + schools", "Post lockdown"))) %>% 
+  # mutate(part_age = factor(part_age,
+  #                          levels = c("0-4", "5-11", "12-17", "18-29", "30-39", "40-49", "50-59", "60-69", "70-120"))) %>% 
+  # drop_na(part_age) %>% 
+  left_join(date_period %>% mutate(mmyyyy = as.yearmon(date)), join_by(mmyyyy))
+
+ggplot() +
+  geom_line(data = combined, aes(x = date, y = scaled)) +
+  scale_color_viridis(discrete = T, option = "D") +
+  theme_bw()
+  
+# Age-stuctured contact matrices (using CoMix and socialmixr) ----
+
+## load comix data from zenodo
+comix_uk <- get_survey("https://doi.org/10.5281/zenodo.4905745")
+
+## load participant file to fill missing participant age
+participants <- read_csv("inst/data/CoMix_uk_participant_common.csv") %>% 
+  select(part_id, part_age) %>% 
+  mutate(part_age = recode(part_age, "Under 1" = "0-1")) %>% 
+  separate(part_age, into = c("part_age_est_min", "part_age_est_max"), sep = "-", convert = TRUE)
+
+## fill in missing participant age
+comix_uk$participants <- comix_uk$participants %>%
+  left_join(participants, by = "part_id")
+
+## save complete UK comix data
+# saveRDS(comix_uk, "inst/data/comix_uk.rds")
+
+contact_matrix <- contact_matrix(comix_uk, age.limits = c(0, 5, 12, 18, 30, 40, 50, 60, 70)) # test for entire survey period
+
+## define fortnight variable in participant data
+participants <- comix_uk$participants %>%
+  mutate(date = as.Date(sday_id, format = "%Y.%m.%d"),
+         fortnight = paste(isoyear(date), "/", sprintf("%02d", ceiling(isoweek(date)/2)))) %>% 
+  group_by(fortnight) %>% 
+  mutate(start_date = min(date),
+         end_date = max (date),
+         mid_date = start_date + floor((end_date - start_date)/2)) %>% 
+  ungroup() %>% 
+  group_split(mid_date) # separate data by fortnights
+
+## define fortnight variable in contact data
+survey <- read_csv("inst/data/CoMix_uk_sday.csv") %>% 
+  select(part_id, sday_id)
+
+contacts <- comix_uk$contacts %>%
+  left_join(survey, join_by(part_id)) %>% 
+  mutate(date = as.Date(sday_id, format = "%Y.%m.%d"),
+         fortnight = paste(isoyear(date), "/", sprintf("%02d", ceiling(isoweek(date)/2)))) %>% 
+  group_by(fortnight) %>% 
+  mutate(start_date = min(date),
+         end_date = max (date),
+         mid_date = start_date + floor((end_date - start_date)/2)) %>% 
+  ungroup() %>% 
+  group_split(mid_date) # separate data by fortnights
+
+
+## create surveys split by fortnight
+fortnight_survey <- list()
+
+for (i in 1:length(participants)) {
+  fortnight_survey[[i]] <- survey(participants[[i]], contacts[[i]])
+}
+
+## create contact matrix for each fortnight survey
+fortnight_matrix <- list()
+
+for (i in 1:length(participants)) {
+  fortnight_matrix[[i]] <- contact_matrix(fortnight_survey[[i]],
+                                          # age.limits = c(0, 1, 5, 10, 15, 25, 35, 45, 55, 65))
+                                          age.limits = c(0, 5, 12, 18, 30, 40, 50, 60, 70))
+}
+
+## quick fix: replace all NAs in matrices with 0, keep track of matrices where there were NAs
+na_fortnight <- logical(length(fortnight_matrix))
+
+for (i in seq_along(fortnight_matrix)) {
+  m <- fortnight_matrix[[i]]$matrix
+  
+  if (anyNA(m)) {
+    na_fortnight[i] <- TRUE
+    m[is.na(m)] <- 0
+    fortnight_matrix[[i]]$matrix <- m
+  }
+}
+
+# Fortnightly average number of contacts per age group ----
+survey <- read_csv("inst/data/CoMix_uk_sday.csv") %>% 
+  select(-X)
+
+participants <- read_csv("inst/data/CoMix_uk_participant_common.csv") %>% 
+  select(part_id, part_age)
+
+contacts <- read_csv("inst/data/CoMix_uk_contact_common.csv") %>% 
+  group_by(part_id) %>% 
+  summarise(count = n())
+
+dates <- data.frame(date = seq(from = as.Date("23-03-2020", format = "%d-%m-%Y"), to = as.Date("02-03-2022", format = "%d-%m-%Y"), by = "day")) %>% 
+  mutate(fortnight = paste(isoyear(date), "/", sprintf("%02d", ceiÏΩling(isoweek(date)/2))),
+         mmyyyy = format(date, "%m/%Y"),
+         quarter = quarters(date))
+
+combined <- survey %>% 
+  left_join(participants, join_by(part_id)) %>% 
+  left_join(contacts, join_by(part_id)) %>% 
+  mutate(count = replace_na(count, 0),
+         date = as.Date(sday_id, format = "%Y.%m.%d"),
+         fortnight = paste(isoyear(date), "/", sprintf("%02d", ceiling(isoweek(date)/2))),
+         mmyyyy = format(date, "%m/%Y"),
+         quarter = quarters(date)) %>% 
+  group_by(quarter, part_age) %>%
+  summarise(mean_contacts = mean(count, na.rm = TRUE)) %>% 
+  mutate(part_age = factor(part_age,
+                           levels = c("0-4", "5-11", "12-17", "18-29", "30-39", "40-49", "50-59", "60-69", "70-120"))) %>% 
+  drop_na(part_age) %>% 
+  left_join(dates, by = "quarter")
+
+ggplot() +
+  geom_line(data = combined, aes(x = date, y = mean_contacts, colour = part_age)) +
+  scale_color_viridis(discrete = T, option = "D") +
+  theme_bw()

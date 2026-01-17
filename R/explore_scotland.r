@@ -43,14 +43,23 @@ data <- read_csv("inst/data/respiratory_scot_20250917.csv") %>%
 
 # plot Scottish data by pathogen ----
 ## ggplot
-ggplot(data) +
+ggplot(data %>% filter(WeekBeginning >= as.Date("2020-03-23") & WeekBeginning <= as.Date("2022-03-02"))) +
   geom_line(aes(x = WeekBeginning, y = NumberCasesPerWeek, colour = Pathogen)) +
   theme_bw() +
-  xlim(as.Date("2020-03-23"), as.Date("2021-03-16")) +
-  annotate("rect",
-           xmin = as.Date("2020-03-23"), xmax = as.Date("2021-03-16"),
-           ymin = -Inf, ymax = Inf,
-           alpha = 0.2, fill = "grey")
+  scale_colour_viridis_d(option = "H", 
+                         begin = 0,
+                         end = 1) +
+  scale_x_date(date_breaks = "1 month") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+      axis.text=element_text(size=12),
+      axis.title=element_text(size=14),
+      legend.text=element_text(size=12),
+      legend.title=element_text(size=14))
+  # xlim(as.Date("2020-03-23"), as.Date("2021-03-16")) +
+  # annotate("rect",
+  #          # xmin = as.Date("2020-03-23"), xmax = as.Date("2021-03-16"),
+  #          ymin = -Inf, ymax = Inf,
+  #          alpha = 0.2, fill = "grey")
 
 ## plotly
 plot_ly() %>%
@@ -78,12 +87,12 @@ plot_ly() %>%
   #           mode = 'lines',
   #           color = 'contacts',
   #           line = list(color='black')) %>% 
-  add_trace(data = out, x = ~date, y = ~inc,
-            yaxis = "y2",
-            type = 'scatter',
-            mode = 'lines',
-            color = 'model',
-            line = list(color='black')) %>%
+  # add_trace(data = out, x = ~date, y = ~inc,
+  #           yaxis = "y2",
+  #           type = 'scatter',
+  #           mode = 'lines',
+  #           color = 'model',
+  #           line = list(color='black')) %>%
   layout(shapes = list(list(type = "rect",
                             x0 = as.Date("2020-03-23"),
                             x1 = as.Date("2021-03-16"),
@@ -131,3 +140,29 @@ subdata <- data %>% filter(AgeGroup %in% c("<1", "1 to 4", "5 to 14"),
                                 x = 0.5, y = 1, xref = 'paper', yref = 'paper',
                                 showarrow = FALSE))}),
     nrows = 1, shareY = TRUE, shareX = TRUE)
+  
+  
+# load Scottish mid-population estimates ----
+## data source: https://www.nrscotland.gov.uk/publications/population-estimates-time-series-data/
+scot_population <- read_excel("inst/data/mid-year-population-estimates-time-series-data.xlsx", sheet = "Table 1", skip = 5) %>% 
+    filter(`Area name` == "Scotland", Sex == "Persons", Year %in% c(2020:2022)) %>% 
+    select(-`All Ages`) %>% 
+    pivot_longer(cols = 5:95, names_to = "age", values_to = "n") %>% 
+    mutate(agegp = case_when(age %in% c("0", "1", "2", "3", "4") ~ "0-4",
+                             age %in% c("5", "6", "7", "8", "9", "10", "11") ~ "5-11",
+                             age %in% c("12", "13", "14", "15", "16", "17") ~ "12-17",
+                             age %in% c("18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29") ~ "18-29",
+                             age %in% c("30", "31", "32", "33", "34", "35", "36", "37", "38", "39") ~ "30-39",
+                             age %in% c("40", "41", "42", "43", "44", "45", "46", "47", "48", "49") ~ "40-49",
+                             age %in% c("50", "51", "52", "53", "54", "55", "56", "57", "58", "59") ~ "50-59",
+                             age %in% c("60", "61", "62", "63", "64", "65", "66", "67", "68", "69") ~ "60-69",
+                             age %in% c(as.character(c(70:89)), "90 and over") ~"70+")) %>% 
+    group_by(agegp, Year) %>% 
+    summarise(sum_n = sum(n)) %>% 
+    ungroup() %>% 
+    group_by(agegp) %>% 
+    summarise(average_n = floor(mean(sum_n))) %>% # taking the average between 2020, 2021 and 2022
+    ungroup() %>% 
+    mutate(agegp = factor(agegp, levels = c("0-4", "5-11", "12-17", "18-29", "30-39", "40-49", "50-59", "60-69", "70+")))
+    
+    
