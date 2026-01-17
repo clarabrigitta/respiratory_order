@@ -24,6 +24,28 @@ c_t <- function(t) {
                   if (t < 360) {return(4.91)} else
                   return(5.06)}
 
+# not important: just testing to see pattern of contacts this way
+c_t <- function(t) {
+  case_when(
+    t <  74 ~ 2.60,
+    t < 130 ~ 3.56,
+    t < 166 ~ 5.25,
+    t < 219 ~ 6.72,
+    t < 256 ~ 5.16,
+    t < 273 ~ 6.02,
+    t < 287 ~ 3.04,
+    t < 352 ~ 2.91,
+    t < 360 ~ 4.91,
+    TRUE    ~ 5.06
+  )
+}
+test <- data.frame(time = 1:706,
+                   ncontacts = NA) %>% 
+  mutate(ncontacts = c_t(time)) %>% 
+  left_join(dates, join_by(time)) %>% 
+  ggplot() +
+  geom_line(aes(x = date, y = ncontacts))
+
 ## date dataframe for duration of CoMix
 dates <- data.frame(date = seq(as.Date("23-03-2020", format = "%d-%m-%Y"), as.Date("02-03-2022", format = "%d-%m-%Y"), 1)) %>% 
   mutate(time = 1:n())
