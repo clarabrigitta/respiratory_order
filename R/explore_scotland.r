@@ -43,18 +43,31 @@ data <- read_csv("inst/data/respiratory_scot_20250917.csv") %>%
 
 # plot Scottish data by pathogen ----
 ## ggplot
-ggplot(data %>% filter(WeekBeginning >= as.Date("2020-03-23") & WeekBeginning <= as.Date("2022-03-02"))) +
+# ggplot(data %>% filter(WeekBeginning >= as.Date("2020-03-23") & WeekBeginning <= as.Date("2022-03-02"))) +
+ggplot(data %>% filter(Pathogen == "Parainfluenza virus")) +
   geom_line(aes(x = WeekBeginning, y = NumberCasesPerWeek, colour = Pathogen)) +
+  geom_vline(xintercept = as.Date("2020-03-26"), linetype = "dashed") + 
+  geom_vline(xintercept = as.Date("2020-08-11"), linetype = "dashed") + 
+  geom_vline(xintercept = as.Date("2021-01-05"), linetype = "dashed") + 
+  geom_vline(xintercept = as.Date("2021-04-26"), linetype = "dashed") + 
+  geom_vline(xintercept = as.Date("2021-08-09"), linetype = "dashed") + 
   theme_bw() +
   scale_colour_viridis_d(option = "H", 
                          begin = 0,
                          end = 1) +
-  scale_x_date(date_breaks = "1 month") +
+  # scale_x_date(date_breaks = "1 month") +
+  scale_x_date(date_breaks = "6 month") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
       axis.text=element_text(size=12),
       axis.title=element_text(size=14),
       legend.text=element_text(size=12),
-      legend.title=element_text(size=14))
+      legend.title=element_text(size=14)) +
+  labs(x = "Week Beginning", y = "Number of Cases per Week")
+  # annotate("text", x = as.Date("2020-03-26") + 5, y = Inf, label = "First\nlockdown", size = 4, vjust = 1.2, hjust = 0) + 
+  # annotate("text", x = as.Date("2020-08-11") + 5, y = Inf, label = "Back to\nschool", size = 4, vjust = 1.2, hjust = 0) + 
+  # annotate("text", x = as.Date("2021-01-05") + 5, y = Inf, label = "Second\nlockdown", size = 4, vjust = 1.2, hjust = 0) +
+  # annotate("text", x = as.Date("2021-04-26") + 5, y = Inf, label = "Level 3", size = 4, vjust = 1.2, hjust = 0) +
+  # annotate("text", x = as.Date("2021-08-09") + 5, y = Inf, label = "Beyond\nlevel 0", size = 4, vjust = 1.2, hjust = 0) 
   # xlim(as.Date("2020-03-23"), as.Date("2021-03-16")) +
   # annotate("rect",
   #          # xmin = as.Date("2020-03-23"), xmax = as.Date("2021-03-16"),
@@ -108,7 +121,23 @@ plot_ly() %>%
 # load Scottish data by pathogen and age ----
 data <- read_csv("inst/data/cases_all_respiratory_pathogens_by_agegroup_sex_20251008.csv") %>% 
   filter(Sex == "Total", !AgeGroup %in% c("Total", "Unknown"), !Pathogen %in% c("Influenza (All)", "COVID-19")) %>% 
-  mutate(WeekBeginning = as.Date(as.character(WeekBeginning), format = "%Y%m%d")) 
+  mutate(WeekBeginning = as.Date(as.character(WeekBeginning), format = "%Y%m%d")) %>% 
+  filter(WeekBeginning >= as.Date("2020-03-23"),
+         WeekBeginning <= as.Date("2022-03-02")) %>% 
+  filter(Pathogen == "Rhinovirus") %>% 
+  mutate(AgeGroup = factor(AgeGroup, levels = c("<1", "1 to 4", "5 to 14", "15 to 44", "45 to 64", "65 to 74", "75+")))
+
+ggplot(data) +
+  geom_line(aes(x = WeekBeginning, y = NumberCasesPerWeek, colour = AgeGroup)) +
+  scale_colour_viridis_d(option = "G", end = 0.8) + 
+  scale_x_date(date_breaks = "1 month") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text=element_text(size=12),
+        axis.title=element_text(size=14),
+        legend.text=element_text(size=12),
+        legend.title=element_text(size=14)) + 
+  labs(x = "Date", y = "Number of Cases Per Week", colour = "Age Group")
 
 # c("<1", "1 to 4", "5 to 14", "15 to 44", "45 to 64", "65 to 74", "75+") # vector of age ranges
 
@@ -149,20 +178,62 @@ scot_population <- read_excel("inst/data/mid-year-population-estimates-time-seri
     select(-`All Ages`) %>% 
     pivot_longer(cols = 5:95, names_to = "age", values_to = "n") %>% 
     mutate(agegp = case_when(age %in% c("0", "1", "2", "3", "4") ~ "0-4",
-                             age %in% c("5", "6", "7", "8", "9", "10", "11") ~ "5-11",
-                             age %in% c("12", "13", "14", "15", "16", "17") ~ "12-17",
-                             age %in% c("18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29") ~ "18-29",
-                             age %in% c("30", "31", "32", "33", "34", "35", "36", "37", "38", "39") ~ "30-39",
-                             age %in% c("40", "41", "42", "43", "44", "45", "46", "47", "48", "49") ~ "40-49",
-                             age %in% c("50", "51", "52", "53", "54", "55", "56", "57", "58", "59") ~ "50-59",
-                             age %in% c("60", "61", "62", "63", "64", "65", "66", "67", "68", "69") ~ "60-69",
-                             age %in% c(as.character(c(70:89)), "90 and over") ~"70+")) %>% 
+                             age %in% c("5", "6", "7", "8", "9", "10") ~ "5-10",
+                             age %in% c("11", "12", "13", "14") ~ "11-14",
+                             age %in% c("15", "16", "17", "18", "19", "20", "21", "22", "23", "24") ~ "15-24",
+                             age %in% c("25", "26", "27", "28", "29", "30", "31", "32", "33", "34") ~ "25-34",
+                             age %in% c("35", "36", "37", "38", "39", "40", "41", "42", "43", "44") ~ "35-44",
+                             age %in% c( "45", "46", "47", "48", "49", "50", "51", "52", "53", "54") ~ "45-54",
+                             age %in% c("55", "56", "57", "58", "59", "60", "61", "62", "63", "64") ~ "55-64",
+                             age %in% c(as.character(c(65:89)), "90 and over") ~"65+")) %>% 
     group_by(agegp, Year) %>% 
     summarise(sum_n = sum(n)) %>% 
     ungroup() %>% 
     group_by(agegp) %>% 
     summarise(average_n = floor(mean(sum_n))) %>% # taking the average between 2020, 2021 and 2022
     ungroup() %>% 
-    mutate(agegp = factor(agegp, levels = c("0-4", "5-11", "12-17", "18-29", "30-39", "40-49", "50-59", "60-69", "70+")))
+    mutate(agegp = factor(agegp, levels = c("0-4", "5-10", "11-14", "15-24", "25-34", "35-44", "45-54", "55-64", "65+")))
     
     
+# calculate daily birth rate for modelled period ----
+## load weekly births in Scotland data
+scot_births <- read_excel("inst/data/weekly-births-26-week-2.xlsx", sheet = "Table_1", skip = 4) %>% 
+    mutate(`Week beginning` = as.Date(`Week beginning`)) %>% 
+    filter(`Registration year` %in% c(2020:2022)) %>% 
+    rename(year = `Registration year`) %>% 
+    group_by(year) %>% 
+    summarise(births_annual = sum(`Births registered`)) %>% 
+    mutate(births_daily = births_annual/365) # calculate daily birth rate
+
+# calculate daily death rate for modelled period ----
+## load monthly deaths in Scotland data
+scot_deaths <- read_excel("inst/data/deaths-time-series-24-corrected.xlsx", sheet = "Table_DT.03", skip = 4) %>% 
+  filter(Year %in% c(2020:2022), Sex == "Persons") %>% 
+  select(-c(`All ages`, `Not Stated`)) %>% 
+  pivot_longer(cols = 3:116, names_to = "age", values_to = "deaths") %>% 
+  mutate(age = as.numeric(age)) %>% 
+  mutate(age_group = case_when(age %in% c(0:4) ~ "0-4",
+                               age %in% c(5:11) ~ "5-11",
+                               age %in% c(12:17) ~ "12-17",
+                               age %in% c(18:29) ~ "18-29",
+                               age %in% c(30:39) ~ "30-39",
+                               age %in% c(40:49) ~ "40-49",
+                               age %in% c(50:59) ~ "50-59",
+                               age %in% c(60:69) ~ "60-69",
+                               age >= 70 ~"70+")) %>% 
+  group_by(Year, age_group) %>% 
+  summarise(deaths = sum(deaths)) %>% 
+  ungroup() %>% 
+  pivot_wider(names_from = Year, values_from = deaths) %>% 
+  mutate(age_group = factor(age_group, levels = c("0-4", "5-11", "12-17", "18-29", "30-39", "40-49", "50-59", "60-69", "70+")),
+         mean_deaths = rowMeans(across(`2020`:`2022`)),
+         daily_deaths = mean_deaths/365) %>% 
+  rename(agegp = age_group) %>% 
+  left_join(scot_population) %>% 
+  mutate(death_rate = daily_deaths/average_n)
+
+scot_deaths %>% select(death_rate) %>% pull() %>% format(scientific = FALSE) %>% paste(collapse = ", ")
+  
+  
+  
+  
