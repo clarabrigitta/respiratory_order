@@ -34,7 +34,7 @@ ggplot() +
   theme_bw()
 
 # CoMix data (age-stratified, up to 2021) ----
-comix_kids <- read_csv("data/contact_matrices_9_periods.csv") %>% 
+comix_kids <- read_csv("inst/data/contact_matrices_9_periods.csv") %>% 
   group_by(Period, `Participant age`) %>%
   summarise(contacts = sum(`mean contacts`, na.rm = TRUE)) %>% 
   # filter(`Participant age` %in% c("0-4", "5-11", "12-17")) %>% 
@@ -157,7 +157,8 @@ comix_uk$participants <- comix_uk$participants %>%
 ## save complete UK comix data
 # saveRDS(comix_uk, "inst/data/comix_uk.rds")
 
-contact_matrix <- contact_matrix(comix_uk, age.limits = c(0, 5, 12, 18, 30, 40, 50, 60, 70)) # test for entire survey period
+# contact_matrix <- contact_matrix(comix_uk, age.limits = c(0, 5, 12, 18, 30, 40, 50, 60, 70)) # test for entire survey period
+contact_matrix <- contact_matrix(comix_uk, age.limits = c(0, 5, 11, 15, 25, 35, 45, 55, 65)) # test for entire survey period
 
 ## define fortnight variable in participant data
 participants <- comix_uk$participants %>%
@@ -198,22 +199,57 @@ fortnight_matrix <- list()
 
 for (i in 1:length(participants)) {
   fortnight_matrix[[i]] <- contact_matrix(fortnight_survey[[i]],
+                                          age.limits = c(0, 5, 11, 15, 25, 35, 45, 55, 65))
                                           # age.limits = c(0, 1, 5, 10, 15, 25, 35, 45, 55, 65))
-                                          age.limits = c(0, 5, 12, 18, 30, 40, 50, 60, 70))
+                                          # age.limits = c(0, 5, 12, 18, 30, 40, 50, 60, 70))
 }
 
-## quick fix: replace all NAs in matrices with 0, keep track of matrices where there were NAs
+## identify which matrices contain missing data
 na_fortnight <- logical(length(fortnight_matrix))
 
-for (i in seq_along(fortnight_matrix)) {
+for (i in seq_along(fortnight_matrix)) {  
   m <- fortnight_matrix[[i]]$matrix
   
   if (anyNA(m)) {
     na_fortnight[i] <- TRUE
-    m[is.na(m)] <- 0
-    fortnight_matrix[[i]]$matrix <- m
   }
 }
+
+## example plot of single fortnightly matrix
+fortnight_matrix[[20]]$matrix %>% 
+  as.data.frame() %>% 
+  rownames_to_column("part_age_group") %>% 
+  rename("0-4" = "[0,5)", "5-10" = "[5,11)", "11-14" = "[11,15)", "15-24" = "[15,25)", "25-34" = "[25,35)", "35-44" = "[35,45)", "45-55" = "[45,55)", "55-64" = "[55,65)") %>% 
+  mutate(part_age_group = case_match(part_age_group,
+                                     "[0,5)" ~ "0-4",
+                                     "[5,11)" ~ "5-10",
+                                     "[11,15)" ~ "11-14",
+                                     "[15,25)" ~ "15-24",
+                                     "[25,35)" ~ "25-34",
+                                     "[35,45)" ~ "35-44",
+                                     "[45,55)" ~ "45-55",
+                                     "[55,65)" ~ "55-64",
+                                     "65+" ~ "65+")) %>%
+  pivot_longer(-part_age_group, names_to = "contact_age_group", values_to = "mean_contacts") %>% 
+  mutate(part_age_group = factor(part_age_group, levels = c("0-4", "5-10", "11-14", "15-24", "25-34", "35-44", "45-55", "55-64", "65+")),
+         contact_age_group = factor(contact_age_group, levels = c("0-4", "5-10", "11-14", "15-24", "25-34", "35-44", "45-55", "55-64", "65+"))) %>% 
+  ggplot(aes(x = part_age_group, y = contact_age_group, fill = mean_contacts)) +
+  geom_tile() +
+  scale_fill_viridis_c(option = "D") +
+  theme_bw() +
+  labs(x = "Participant Age Group", y = "Contact Age Group", fill = "Mean Contacts") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text=element_text(size=12),
+        axis.title=element_text(size=14),
+        legend.text=element_text(size=12),
+        legend.title=element_text(size=14))
+
+# processing for first 3 fortnights and last fortnight containing missing participant data ----
+
+fortnight_matrix[[1]][["matrix"]] <- fortnight_matrix[[4]][["matrix"]]
+fortnight_matrix[[2]][["matrix"]] <- fortnight_matrix[[4]][["matrix"]]
+fortnight_matrix[[3]][["matrix"]] <- fortnight_matrix[[4]][["matrix"]]
+fortnight_matrix[[52]][["matrix"]] <- fortnight_matrix[[51]][["matrix"]]
 
 # Fortnightly average number of contacts per age group ----
 survey <- read_csv("inst/data/CoMix_uk_sday.csv") %>% 
@@ -227,7 +263,7 @@ contacts <- read_csv("inst/data/CoMix_uk_contact_common.csv") %>%
   summarise(count = n())
 
 dates <- data.frame(date = seq(from = as.Date("23-03-2020", format = "%d-%m-%Y"), to = as.Date("02-03-2022", format = "%d-%m-%Y"), by = "day")) %>% 
-  mutate(fortnight = paste(isoyear(date), "/", sprintf("%02d", ceiÏΩling(isoweek(date)/2))),
+  mutate(fortnight = paste(isoyear(date), "/", sprintf("%02d", ceiling(isoweek(date)/2))),
          mmyyyy = format(date, "%m/%Y"),
          quarter = quarters(date))
 
@@ -248,5 +284,55 @@ combined <- survey %>%
 
 ggplot() +
   geom_line(data = combined, aes(x = date, y = mean_contacts, colour = part_age)) +
-  scale_color_viridis(discrete = T, option = "D") +
-  theme_bw()
+  scale_colour_viridis_d(option = "G", end = 0.8) + 
+  scale_x_date(date_breaks = "1 month") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text=element_text(size=12),
+        axis.title=element_text(size=14),
+        legend.text=element_text(size=12),
+        legend.title=element_text(size=14)) + 
+  labs(x = "Date", y = "Mean Number of Contacts", colour = "Age Group")
+
+# POLYMOD data ----
+
+## load POLYMOD data from zenodo
+polymod <- get_survey("https://doi.org/10.5281/zenodo.3874557")
+
+## process POLYMOD data
+polymod[["participants"]] <- polymod[["participants"]] %>% filter(country == "United Kingdom") # filter for participants in UK
+uk_part <- polymod[["participants"]] %>% select(part_id) %>% pull() # select UK participants id
+polymod[["contacts"]] <- polymod[["contacts"]] %>% filter(part_id %in% uk_part, cnt_school == FALSE) # filter out school contacts
+
+polymod_matrix <- contact_matrix(polymod, age.limits = c(0, 5, 12, 18, 30, 40, 50, 60, 70))
+
+# imputation/processing for missing participant data ----
+
+## compute dominant eigenvalue of 3 matrices missing data
+missing1 <- fortnight_matrix[[1]][["matrix"]][4:9, 4:9]
+dom1 <- max(Mod(eigen(missing1)$values))
+
+missing2 <- fortnight_matrix[[2]][["matrix"]][4:9, 4:9]
+dom2 <- max(Mod(eigen(missing2)$values))
+
+missing3 <- fortnight_matrix[[3]][["matrix"]][4:9, 4:9]
+dom3 <- max(Mod(eigen(missing3)$values))
+
+## compute dominant eigenvalue of corresponding POLYMOD matrix
+polymod_subset <- polymod_matrix[["matrix"]][4:9, 4:9]
+dom_polymod <- max(Mod(eigen(polymod_subset)$values))
+
+## compute scaling factor for 3 CoMix matrices
+q1 <- dom1/dom_polymod
+q2 <- dom2/dom_polymod
+q3 <- dom3/dom_polymod
+
+## replace missing CoMiX data with scaled POLYMOD
+fortnight_matrix[[1]][["matrix"]][1:3, ] <- polymod_matrix[["matrix"]][1:3, ] * q1
+fortnight_matrix[[1]][["matrix"]][4:9, 1:3] <- polymod_matrix[["matrix"]][4:9, 1:3] * q1
+
+fortnight_matrix[[2]][["matrix"]][1:3, ] <- polymod_matrix[["matrix"]][1:3, ] * q2
+fortnight_matrix[[2]][["matrix"]][4:9, 1:3] <- polymod_matrix[["matrix"]][4:9, 1:3] * q2
+
+fortnight_matrix[[3]][["matrix"]][1:3, ] <- polymod_matrix[["matrix"]][1:3, ] * q3
+fortnight_matrix[[3]][["matrix"]][4:9, 1:3] <- polymod_matrix[["matrix"]][4:9, 1:3] * q3
