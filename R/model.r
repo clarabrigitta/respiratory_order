@@ -103,7 +103,7 @@ y0 <- c(S1 = tot1-5-floor(tot1*sus_distribution), E1 = 0, I1 = 5, R1 = floor(tot
         S9 = tot9-5-floor(tot9*sus_distribution), E9 = 0, I9 = 5, R9 = floor(tot9*sus_distribution))
 
 ### duration of model run
-times <- seq(0, 705, by = 1)
+times <- seq(0, 709, by = 1)
 
 ### parallel run model
 print(paste("start:", Sys.time()))
