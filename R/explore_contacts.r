@@ -267,6 +267,30 @@ dates <- data.frame(date = seq(from = as.Date("23-03-2020", format = "%d-%m-%Y")
          mmyyyy = format(date, "%m/%Y"),
          quarter = quarters(date))
 
+## not age-stratified example
+combined <- survey %>% 
+  left_join(participants, join_by(part_id)) %>% 
+  left_join(contacts, join_by(part_id)) %>% 
+  mutate(count = replace_na(count, 0),
+         date = as.Date(sday_id, format = "%Y.%m.%d"),
+         fortnight = paste(isoyear(date), "/", sprintf("%02d", ceiling(isoweek(date)/2))),
+         mmyyyy = format(date, "%m/%Y"),
+         quarter = quarters(date)) %>% 
+  group_by(fortnight) %>%
+  summarise(mean_contacts = mean(count, na.rm = TRUE)) %>% 
+  left_join(dates, by = "fortnight")
+
+ggplot() +
+  geom_line(data = combined, aes(x = date, y = mean_contacts), colour = "blue", lty = 2) +
+  scale_x_date(date_breaks = "1 month") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text=element_text(size=12),
+        axis.title=element_text(size=14),
+        legend.text=element_text(size=12),
+        legend.title=element_text(size=14)) + 
+  labs(x = "Date", y = "Mean Number of Contacts")
+
 combined <- survey %>% 
   left_join(participants, join_by(part_id)) %>% 
   left_join(contacts, join_by(part_id)) %>% 
