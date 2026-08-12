@@ -291,6 +291,7 @@ ggplot() +
         legend.title=element_text(size=14)) + 
   labs(x = "Date", y = "Mean Number of Contacts")
 
+## age-stratified example
 combined <- survey %>% 
   left_join(participants, join_by(part_id)) %>% 
   left_join(contacts, join_by(part_id)) %>% 
@@ -299,15 +300,20 @@ combined <- survey %>%
          fortnight = paste(isoyear(date), "/", sprintf("%02d", ceiling(isoweek(date)/2))),
          mmyyyy = format(date, "%m/%Y"),
          quarter = quarters(date)) %>% 
-  group_by(quarter, part_age) %>%
+  mutate(agegp = case_when(part_age %in% c("Under 1", "0-4") ~ "0 to 4",
+                           part_age %in% c("5-11") ~ "5 to 14", #"12-17"
+                           part_age %in% c("18-19", "18-29", "25-34", "30-39", "35-44") ~ "15 to 44", #"40-49"
+                           part_age %in% c("45-54", "50-59") ~ "45 to 64", #"60-69"
+                           part_age %in% c("70-120") ~ "65+")) %>% 
+  group_by(fortnight, agegp) %>%
   summarise(mean_contacts = mean(count, na.rm = TRUE)) %>% 
-  mutate(part_age = factor(part_age,
-                           levels = c("0-4", "5-11", "12-17", "18-29", "30-39", "40-49", "50-59", "60-69", "70-120"))) %>% 
-  drop_na(part_age) %>% 
-  left_join(dates, by = "quarter")
+  mutate(agegp = factor(agegp,
+                           levels = c("0 to 4", "5 to 14", "15 to 44", "45 to 64", "65+"))) %>% 
+  drop_na(agegp) %>%
+  left_join(dates, by = "fortnight")
 
 ggplot() +
-  geom_line(data = combined, aes(x = date, y = mean_contacts, colour = part_age)) +
+  geom_line(data = combined, aes(x = date, y = mean_contacts, colour = agegp)) +
   scale_colour_viridis_d(option = "G", end = 0.8) + 
   scale_x_date(date_breaks = "1 month") +
   theme_bw() +
@@ -319,7 +325,6 @@ ggplot() +
   labs(x = "Date", y = "Mean Number of Contacts", colour = "Age Group")
 
 # POLYMOD data ----
-
 ## load POLYMOD data from zenodo
 polymod <- get_survey("https://doi.org/10.5281/zenodo.3874557")
 
@@ -329,6 +334,7 @@ uk_part <- polymod[["participants"]] %>% select(part_id) %>% pull() # select UK 
 polymod[["contacts"]] <- polymod[["contacts"]] %>% filter(part_id %in% uk_part, cnt_school == FALSE) # filter out school contacts
 
 polymod_matrix <- contact_matrix(polymod, age.limits = c(0, 5, 12, 18, 30, 40, 50, 60, 70))
+
 
 # imputation/processing for missing participant data ----
 
