@@ -3,6 +3,16 @@
 ## helper data and functions ----
 ### pathogen name reference: name in combination data frame vs name in Scottish data
 pathogen_map <- c(
+  fluA = "Influenza - Type A (any subtype)",
+  fluB = "Influenza - Type B",
+  RSV = "Respiratory syncytial virus",
+  hCOV = "Seasonal coronavirus (Non-SARS-CoV-2)",
+  AdV = "Adenovirus",
+  RV = "Rhinovirus",
+  hMPV = "Human metapneumovirus",
+  PIV = "Parainfluenza virus"
+)
+pathogen_map <- c(
   fluA = "Influenza A",
   fluB = "Influenza B",
   RSV = "RSV",
@@ -71,7 +81,7 @@ run_model <- function(p_sus, n, imm_days) {
 }
 
 ### bayesian specifications
-settings <- list(iterations = 10000, burnin = 2000,  nrChains = 1)
+settings <- list(iterations = 100000, burnin = 50000,  nrChains = 1)
 
 ### fit all combinations
 results <- list()
@@ -121,7 +131,7 @@ for (n in seq_along(combinations)) {
   cat("  Done:", virus_name, "\n")
 }
 
-saveRDS(results, file = here("inst", "outdata", "parameters_sus_det_imm_05032026"))
+saveRDS(results, file = here("inst", "outdata", "parameters_sus_det_imm_16032026"))
 
 ### manual diagnostic checks
 summary(results[["RV"]])
@@ -139,11 +149,15 @@ for (n in seq_along(combinations)) {
   
   local({
     n_local   <- n
-    posterior <- getSample(results[[n_local]], start = 2)
+    posterior <- getSample(results[[n_local]], start = 10)
     
     traj <- lapply(1:nrow(posterior),
                    function(r){
-                     run_model(p_sus = posterior[r, 1], n = n_local, imm_days = posterior[r, 3])$inc * posterior[r, 2]
+                     detection_rates <- posterior[r, 1:5]
+                     model_out <- run_model(p_sus = posterior[r, 6], n = n_local, imm_days = posterior[r, 7])
+                     expected_out <- sweep(model_out, 2, detection_rates, `*`)
+                     colnames(expected_out) <- c("0 to 4", "5 to 14", "15 to 44", "45 to 64", "65+")
+                     return(expected_out)
                    })
     
     results_traj[[virus_name]] <<- traj
@@ -152,7 +166,8 @@ for (n in seq_along(combinations)) {
   cat("  Done:", virus_name, "\n")
 }
 
-saveRDS(results_traj, file = here("inst", "outdata", "traj_sus_det_imm_05032026"))
+
+saveRDS(results_traj, file = here("inst", "outdata", "traj_sus_det_imm_16032026"))
 
 ## process trajectories for plotting ----
 ### choose which virus trajectory and data
