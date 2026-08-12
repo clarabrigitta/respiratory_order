@@ -43,8 +43,8 @@ data <- read_csv("inst/data/respiratory_scot_20250917.csv") %>%
 
 # plot Scottish data by pathogen ----
 ## ggplot
-# ggplot(data %>% filter(WeekBeginning >= as.Date("2020-03-23") & WeekBeginning <= as.Date("2022-03-02"))) +
-ggplot(data %>% filter(Pathogen == "Parainfluenza virus")) +
+ggplot(data %>% filter(WeekBeginning >= as.Date("2020-03-23") & WeekBeginning <= as.Date("2022-03-02"))) +
+# ggplot(data %>% filter(Pathogen == "Parainfluenza virus")) +
   geom_line(aes(x = WeekBeginning, y = NumberCasesPerWeek, colour = Pathogen)) +
   geom_vline(xintercept = as.Date("2020-03-26"), linetype = "dashed") + 
   geom_vline(xintercept = as.Date("2020-08-11"), linetype = "dashed") + 
@@ -124,7 +124,7 @@ data <- read_csv("inst/data/cases_all_respiratory_pathogens_by_agegroup_sex_2025
   mutate(WeekBeginning = as.Date(as.character(WeekBeginning), format = "%Y%m%d")) %>% 
   filter(WeekBeginning >= as.Date("2020-03-23"),
          WeekBeginning <= as.Date("2022-03-02")) %>% 
-  filter(Pathogen == "Rhinovirus") %>% 
+  # filter(Pathogen == "Rhinovirus") %>% 
   mutate(AgeGroup = factor(AgeGroup, levels = c("<1", "1 to 4", "5 to 14", "15 to 44", "45 to 64", "65 to 74", "75+")))
 
 ggplot(data) +
@@ -146,9 +146,11 @@ ggplot(data) +
 ggplot() +
   geom_line(data = data %>% filter(AgeGroup %in% c("<1", "1 to 4", "5 to 14"),
                                    ISOyear >= 2020 & ISOyear <= 2021), aes(x = WeekBeginning, y = NumberCasesPerWeek, colour = Pathogen)) +
-  scale_color_viridis(discrete = T, option = "D") +
+  scale_colour_viridis_d(option = "H",
+                         begin = 0,
+                         end = 1) +  
   theme_bw() +
-  facet_grid(~AgeGroup)
+  facet_wrap(~AgeGroup, ncol = 1, scales = "free_y")
 
 ## plotly
 subdata <- data %>% filter(AgeGroup %in% c("<1", "1 to 4", "5 to 14"),
