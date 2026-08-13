@@ -26,12 +26,10 @@ data <- read_csv("inst/data/rcgp/Number of samples by virus by week.csv") %>%
 
 # plot RCGP data by virus ----
 ## ggplot - counts
-ggplot(data) +
+ggplot(data %>% filter(Virus != "SARS-CoV-2")) +
   geom_line(aes(x = WeekBeginning, y = NumberPositivesPerWeek, colour = Virus)) +
   theme_bw() +
-  scale_colour_viridis_d(option = "H",
-                         begin = 0,
-                         end = 1) +
+  scale_colour_manual(values = pathogen_cols, na.value = "grey70") +
   scale_x_date(date_breaks = "3 month") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         axis.text=element_text(size=12),
@@ -42,12 +40,10 @@ ggplot(data) +
 
 ## ggplot - positivity
 ## note: swab numbers collapse during this period (36-621 per week, median 108), so positivity is noisy
-ggplot(data) +
+ggplot(data %>% filter(Virus != "SARS-CoV-2")) +
   geom_line(aes(x = WeekBeginning, y = Positivity, colour = Virus)) +
   theme_bw() +
-  scale_colour_viridis_d(option = "H",
-                         begin = 0,
-                         end = 1) +
+  scale_colour_manual(values = pathogen_cols, na.value = "grey70") +
   scale_x_date(date_breaks = "3 month") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         axis.text=element_text(size=12),
@@ -58,10 +54,9 @@ ggplot(data) +
 
 # load RCGP data by virus and age ----
 ## virology-age-band.xlsx supersedes the per-age csv files: it covers 2019-10-07 to 2026-07-20 (so it
-## spans the modelled period) and, unlike the csvs, carries the "None detected" rows, which give an
-## age-specific denominator
+## spans the modelled period) and contains the "None detected" rows, which give an age-specific denominator
 ## one sheet per age band, plus an "All ages" sheet (the four bands sum exactly to it)
-## sheets have two rows of applied-filter text above the header, hence skip = 2
+## sheets have two rows of applied-filter text above the header, so skip = 2
 age_sheets <- c("Under 5" = "lt 5",
                 "5-18"    = "between 5 & 18",
                 "19-64"   = "between 19 & 64",
@@ -71,13 +66,13 @@ data_age_raw <- bind_rows(lapply(names(age_sheets), function(a) {
   read_excel("inst/data/rcgp/virology-age-band.xlsx", sheet = age_sheets[[a]], skip = 2) %>%
     mutate(AgeGroup = a)})) %>%
   mutate(WeekBeginning = as.Date(`Week commencing`),
-         Virus = sub("\\*+$", "", VirusDisplayName)) %>% # strip footnote markers, e.g. "Other Coronavirus**"
+         Virus = sub("\\*+$", "", VirusDisplayName)) %>% # strip footnote markers
   rename(NumberPositivesPerWeek = NumberOfPositivesThisWeek) %>%
   select(WeekBeginning, AgeGroup, Virus, NumberPositivesPerWeek)
 
 ## age-specific denominator: all results for that age band and week, i.e. positives plus "None detected"
 ## note: this slightly exceeds the number of samples where one sample has multiple detections (against the
-## all-age swab counts the equivalent total runs ~2% high, median ratio 1.02), so treat it as a close proxy
+## all-age swab counts), but close proxy
 samples_age <- data_age_raw %>%
   group_by(WeekBeginning, AgeGroup) %>%
   summarise(NumberSamplesPerWeek = sum(NumberPositivesPerWeek), .groups = "drop")
@@ -90,18 +85,16 @@ data_age <- data_age_raw %>%
            Virus,
            fill = list(NumberPositivesPerWeek = 0)) %>% # weeks with no positives are absent rather than zero
   left_join(samples_age, by = c("WeekBeginning", "AgeGroup")) %>%
-  mutate(AgeGroup = factor(AgeGroup, levels = c("Under 5", "5-18", "19-64", "65+")), # set after the join, which would coerce a factor back to character
+  mutate(AgeGroup = factor(AgeGroup, levels = c("Under 5", "5-18", "19-64", "65+")),
          Positivity = 100 * NumberPositivesPerWeek / NumberSamplesPerWeek) %>% # NA where no samples taken
   filter(WeekBeginning >= date_start, WeekBeginning <= date_end) # drop this line for the full 2019-2026 extent
 
 # plot RCGP data by virus and age ----
 ## ggplot - counts
-ggplot(data_age) +
+ggplot(data_age%>% filter(Virus != "COVID-19")) +
   geom_line(aes(x = WeekBeginning, y = NumberPositivesPerWeek, colour = Virus)) +
   theme_bw() +
-  scale_colour_viridis_d(option = "H",
-                         begin = 0,
-                         end = 1) +
+  scale_colour_manual(values = pathogen_cols, na.value = "grey70") +
   scale_x_date(date_breaks = "3 month") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         axis.text=element_text(size=12),
@@ -112,9 +105,7 @@ ggplot(data_age) +
   labs(x = "Week Beginning", y = "Number of Positives per Week", colour = "Virus")
 
 ## ggplot - positivity
-## note: age-band denominators are very small over this period (median samples per week: 12 under 5,
-## 8 for 5-18, 57 for 19-64, 22 for 65+), so the paediatric bands in particular swing to 0/100% on
-## single samples - read these alongside the counts above
+## note: age-band denominators are very small over this period 
 ggplot(data_age) +
   geom_line(aes(x = WeekBeginning, y = Positivity, colour = Virus)) +
   theme_bw() +

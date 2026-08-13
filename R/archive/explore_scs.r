@@ -117,7 +117,7 @@ contacts_agegp <- scs_fortnight %>%
 
 ggplot() +
   geom_line(data = contacts_agegp, aes(x = mid_date, y = mean_contacts, colour = part_age_group)) +
-  scale_colour_viridis_d(option = "G", end = 0.8) +
+  scale_colour_viridis_d(option = "H", end = 0.8) +
   scale_x_date(date_breaks = "2 months") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
@@ -146,17 +146,3 @@ ggplot() +
         legend.text=element_text(size=12),
         legend.title=element_text(size=14)) +
   labs(x = "Date", y = "Mean Number of Contacts")
-
-## total and age-specific contacts on the same plot
-ggplot() +
-  geom_line(data = contacts_agegp, aes(x = mid_date, y = mean_contacts, colour = part_age_group)) +
-  geom_line(data = contacts_total, aes(x = mid_date, y = mean_contacts), colour = "black", lty = 2, linewidth = 1) +
-  scale_colour_viridis_d(option = "G", end = 0.8) +
-  scale_x_date(date_breaks = "2 months") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        axis.text=element_text(size=12),
-        axis.title=element_text(size=14),
-        legend.text=element_text(size=12),
-        legend.title=element_text(size=14)) +
-  labs(x = "Date", y = "Mean Number of Contacts", colour = "Age Group")

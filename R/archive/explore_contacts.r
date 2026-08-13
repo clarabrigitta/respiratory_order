@@ -186,7 +186,6 @@ contacts <- comix_uk$contacts %>%
   ungroup() %>% 
   group_split(mid_date) # separate data by fortnights
 
-
 ## create surveys split by fortnight
 fortnight_survey <- list()
 
@@ -214,6 +213,13 @@ for (i in seq_along(fortnight_matrix)) {
     na_fortnight[i] <- TRUE
   }
 }
+
+# processing for first 3 fortnights and last fortnight containing missing participant data
+
+fortnight_matrix[[1]][["matrix"]] <- fortnight_matrix[[4]][["matrix"]]
+fortnight_matrix[[2]][["matrix"]] <- fortnight_matrix[[4]][["matrix"]]
+fortnight_matrix[[3]][["matrix"]] <- fortnight_matrix[[4]][["matrix"]]
+fortnight_matrix[[52]][["matrix"]] <- fortnight_matrix[[51]][["matrix"]]
 
 ## example plot of single fortnightly matrix
 fortnight_matrix[[20]]$matrix %>% 
@@ -243,13 +249,6 @@ fortnight_matrix[[20]]$matrix %>%
         axis.title=element_text(size=14),
         legend.text=element_text(size=12),
         legend.title=element_text(size=14))
-
-# processing for first 3 fortnights and last fortnight containing missing participant data ----
-
-fortnight_matrix[[1]][["matrix"]] <- fortnight_matrix[[4]][["matrix"]]
-fortnight_matrix[[2]][["matrix"]] <- fortnight_matrix[[4]][["matrix"]]
-fortnight_matrix[[3]][["matrix"]] <- fortnight_matrix[[4]][["matrix"]]
-fortnight_matrix[[52]][["matrix"]] <- fortnight_matrix[[51]][["matrix"]]
 
 # Fortnightly average number of contacts per age group ----
 survey <- read_csv("inst/data/CoMix_uk_sday.csv") %>% 
@@ -314,7 +313,7 @@ combined <- survey %>%
 
 ggplot() +
   geom_line(data = combined, aes(x = date, y = mean_contacts, colour = agegp)) +
-  scale_colour_viridis_d(option = "G", end = 0.8) + 
+  scale_colour_viridis_d(option = "H", end = 0.8) + 
   scale_x_date(date_breaks = "1 month") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
@@ -336,7 +335,8 @@ polymod[["contacts"]] <- polymod[["contacts"]] %>% filter(part_id %in% uk_part, 
 polymod_matrix <- contact_matrix(polymod, age.limits = c(0, 5, 12, 18, 30, 40, 50, 60, 70))
 
 
-# imputation/processing for missing participant data ----
+# imputation/processing for missing participant data
+
 
 ## compute dominant eigenvalue of 3 matrices missing data
 missing1 <- fortnight_matrix[[1]][["matrix"]][4:9, 4:9]
@@ -366,3 +366,4 @@ fortnight_matrix[[2]][["matrix"]][4:9, 1:3] <- polymod_matrix[["matrix"]][4:9, 1
 
 fortnight_matrix[[3]][["matrix"]][1:3, ] <- polymod_matrix[["matrix"]][1:3, ] * q3
 fortnight_matrix[[3]][["matrix"]][4:9, 1:3] <- polymod_matrix[["matrix"]][4:9, 1:3] * q3
+

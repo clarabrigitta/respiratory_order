@@ -52,9 +52,7 @@ ggplot(data %>% filter(WeekBeginning >= as.Date("2020-03-23") & WeekBeginning <=
   geom_vline(xintercept = as.Date("2021-04-26"), linetype = "dashed") + 
   geom_vline(xintercept = as.Date("2021-08-09"), linetype = "dashed") + 
   theme_bw() +
-  scale_colour_viridis_d(option = "H", 
-                         begin = 0,
-                         end = 1) +
+  scale_colour_manual(values = pathogen_cols, na.value = "grey70") +
   # scale_x_date(date_breaks = "1 month") +
   scale_x_date(date_breaks = "6 month") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
@@ -145,10 +143,9 @@ ggplot(data) +
 ## ggplot
 ggplot() +
   geom_line(data = data %>% filter(AgeGroup %in% c("<1", "1 to 4", "5 to 14"),
-                                   ISOyear >= 2020 & ISOyear <= 2021), aes(x = WeekBeginning, y = NumberCasesPerWeek, colour = Pathogen)) +
-  scale_colour_viridis_d(option = "H",
-                         begin = 0,
-                         end = 1) +  
+                                   ISOyear >= 2020 & ISOyear <= 2021,
+                                   Pathogen != "Mycoplasma pneumoniae"), aes(x = WeekBeginning, y = NumberCasesPerWeek, colour = Pathogen)) +
+  scale_colour_manual(values = pathogen_cols, na.value = "grey70") +
   theme_bw() +
   facet_wrap(~AgeGroup, ncol = 1, scales = "free_y")
 
@@ -235,7 +232,3 @@ scot_deaths <- read_excel("inst/data/deaths-time-series-24-corrected.xlsx", shee
   mutate(death_rate = daily_deaths/average_n)
 
 scot_deaths %>% select(death_rate) %>% pull() %>% format(scientific = FALSE) %>% paste(collapse = ", ")
-  
-  
-  
-  
