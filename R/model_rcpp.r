@@ -16,8 +16,34 @@ c_t <- function(t) {
   fortnight_matrix[[fortnight_lookup[findInterval(t, dates$time)]]]$matrix
 }
 
+# pre-flatten fortnight contact matrices into a C++-ready format.
+# run after fortnight_matrix and fortnight_lookup created
+#
+# fortnight_matrix : list of length n_fn; each element has $matrix (9x9)
+# fortnight_lookup : dates$fortnight_n - integer vector of length 710 mapping
+#                   each day (1-indexed position = day 0-indexed + 1) to a
+#                   fortnight index (1-based)
+prepare_contacts_cpp <- function(fortnight_matrix, fortnight_lookup) {
+  n_fn  <- length(fortnight_matrix)
+  n_age <- 9L
+  
+  # Stack matrices row-major (transpose before as.vector because R is column-major)
+  contacts_flat <- numeric(n_fn * n_age * n_age)
+  for (i in seq_len(n_fn)) {
+    mat <- fortnight_matrix[[i]]$matrix
+    contacts_flat[((i - 1L) * 81L + 1L):(i * 81L)] <- as.vector(t(mat))
+  }
+  
+  # fn_at_day[d] (0-indexed d = day) = fortnight index (1-based)
+  # fortnight_lookup[findInterval(t, 0:709)] = fortnight_lookup[t+1] for t in 0:708
+  # so fn_at_day is just fortnight_lookup as an integer vector
+  fn_at_day <- as.integer(fortnight_lookup)
+  
+  list(contacts_flat = contacts_flat, fn_at_day = fn_at_day)
+}
+
 ### create data frame defining model parameters
-source(here("R", "create_combinations.R"))
+source(here("R", "create_combinations.r"))
 combinations <- create_combinations()
 
 ### average population estimate between 2020-2022 for each age group
@@ -42,10 +68,7 @@ a8 <- 1/(10*365) # 55-64
 # aging rate vector
 a_vec <- c(a1, a2, a3, a4, a5, a6, a7, a8)
 
-### duration of model run
-times <- seq(0, 709, by = 1)
-
-# ---- C++ ODE implementation ----
+# C++ ODE implementation ----
 sourceCpp(code = '
 #include <Rcpp.h>
 using namespace Rcpp;
@@ -111,7 +134,6 @@ static void compute_rhs(
 //   a_vec         - aging rates for groups 1-8 (length 8)
 //
 // Returns a matrix with columns: time, S1,E1,I1,R1,...,S9,E9,I9,R9, inc1,...,inc9
-// (identical column layout to deSolve::ode output so downstream code is unchanged)
 
 // [[Rcpp::export]]
 NumericMatrix seirs_ode_rcpp(
@@ -209,46 +231,8 @@ NumericMatrix seirs_ode_rcpp(
 }
 ')
 
-# ---- R wrappers ----
-
-# Pre-flatten fortnight contact matrices into a C++-ready format.
-# Call this once after fortnight_matrix and fortnight_lookup are constructed
-# (i.e. after explore_contacts.r has run).
-#
-# fortnight_matrix : list of length n_fn; each element has $matrix (9x9)
-# fortnight_lookup : dates$fortnight_n - integer vector of length 710 mapping
-#                   each day (1-indexed position = day 0-indexed + 1) to a
-#                   fortnight index (1-based)
-prepare_contacts_cpp <- function(fortnight_matrix, fortnight_lookup) {
-  n_fn  <- length(fortnight_matrix)
-  n_age <- 9L
-
-  # Stack matrices row-major (transpose before as.vector because R is column-major)
-  contacts_flat <- numeric(n_fn * n_age * n_age)
-  for (i in seq_len(n_fn)) {
-    mat <- fortnight_matrix[[i]]$matrix
-    contacts_flat[((i - 1L) * 81L + 1L):(i * 81L)] <- as.vector(t(mat))
-  }
-
-  # fn_at_day[d] (0-indexed d = day) = fortnight index (1-based)
-  # fortnight_lookup[findInterval(t, 0:709)] = fortnight_lookup[t+1] for t in 0:708
-  # so fn_at_day is just fortnight_lookup as an integer vector
-  fn_at_day <- as.integer(fortnight_lookup)
-
-  list(contacts_flat = contacts_flat, fn_at_day = fn_at_day)
-}
-
-# Run the C++ SEIRS ODE solver.
-# Returns a matrix with the same column layout as deSolve::ode():
-#   col 1  : time
-#   cols 2-37 : S1,E1,I1,R1, S2,E2,I2,R2, ..., S9,E9,I9,R9
-#   cols 38-46: inc1, inc2, ..., inc9
-#
-# y0               : named initial state vector (same as passed to ode())
-# times            : integer day sequence (e.g. seq(0, 709, by = 1))
-# parms            : list(sigma, gamma, omega, p_inf, mu_b, mu_d)
-# contacts_prepped : output of prepare_contacts_cpp()
-# a_vec_in         : aging rate vector length 8 (defaults to module-level a_vec)
+# run C++ SEIRS ODE solver.
+# returns a matrix with the same column layout as deSolve::ode():
 seirs_rcpp <- function(y0, times, parms, contacts_prepped, a_vec_in = a_vec) {
   out <- seirs_ode_rcpp(
     y0            = as.numeric(y0),
@@ -265,7 +249,6 @@ seirs_rcpp <- function(y0, times, parms, contacts_prepped, a_vec_in = a_vec) {
     a_vec         = a_vec_in
   )
 
-  # Column names match deSolve convention used downstream
   state_names <- paste0(rep(c("S", "E", "I", "R"), 9), rep(1:9, each = 4))
   colnames(out) <- c("time", state_names, paste0("inc", 1:9))
 
