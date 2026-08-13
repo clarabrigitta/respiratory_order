@@ -187,7 +187,7 @@ for (n in seq_along(combinations)) {
   cat("Done:", virus_name, "-", format(Sys.time(), "%H:%M:%S"), "\n")
 }
 
-saveRDS(results, file = here("inst", "outdata", "parameters_rcpp_sus_det_imm_12082026"))
+saveRDS(results, file = here("inst", "outdata", "parameters_12082026")) # change date as needed
 
 # manual diagnostic checks ----
 summary(results[["RSV"]])
