@@ -10,7 +10,7 @@ source(here("R", "create_combinations.r"))
 combinations <- create_combinations()
 
 ## load model fit output
-results <- readRDS(file = here("inst", "outdata", "parameters_13072026")) # change date as needed
+results <- readRDS(file = here("inst", "outdata", "parameters_18092026")) # change date as needed
 
 # generate model trajectories ----
 ## better if fit_model_rcpp.r run up to model runner
@@ -28,8 +28,9 @@ for (n in seq_along(combinations)) {
       p_sus_bands     <- posterior[r, idx$sus]
       imm_duration    <- posterior[r, idx$imm]
       imports         <- 10^posterior[r, idx$imp]
+      p_inf           <- posterior[r, idx$pinf]
       
-      model_out <- run_model_rcpp(p_sus_bands, n_local, imm_duration, imports)
+      model_out <- run_model_rcpp(p_sus_bands, n_local, imm_duration, imports, p_inf)
       expected_out <- sweep(model_out, 2, detection_rates, `*`)
       colnames(expected_out) <- c("0 to 4", "5 to 14", "15 to 44", "45 to 64", "65+")
       expected_out
@@ -41,7 +42,7 @@ for (n in seq_along(combinations)) {
   cat("  Done:", virus_name, "\n")
 }
 
-saveRDS(results_traj, file = here("inst", "outdata", "traj_12082026")) # change date as needed
+saveRDS(results_traj, file = here("inst", "outdata", "traj_18092026")) # change date as needed
 
 # Rt calculation ----
 ## date data frame for assistance/reference
@@ -87,12 +88,13 @@ for (n in seq_along(combinations)) {
   
   local({
     n_local <- n
-    posterior <- getSample(results[[n_local]], start = 2, thin = 100)
+    posterior <- getSample(results[[n_local]], start = 3, thin = 100)
     
     rt_traj <- lapply(seq_len(nrow(posterior)), function(r) {
       p_sus_bands  <- posterior[r, idx$sus]
       imm_duration <- posterior[r, idx$imm]
       imports      <- 10^posterior[r, idx$imp]
+      p_inf        <- posterior[r, idx$pinf]
       
       sigma <- 1 / combinations[[n_local]]$inc_period
       gamma <- 1 / combinations[[n_local]]$inf_period
@@ -115,7 +117,7 @@ for (n in seq_along(combinations)) {
           sigma = 1 / combinations[[n_local]]$inc_period,
           gamma = 1 / combinations[[n_local]]$inf_period,
           omega = 1 / imm_duration,
-          p_inf = combinations[[n_local]]$p_inf,
+          p_inf = p_inf,
           bg = bg,
           mu_b = daily_births,
           mu_d = hazard_death
@@ -124,7 +126,7 @@ for (n in seq_along(combinations)) {
       )
       
       calculate_rt(ode_out,
-                   p_inf = combinations[[n_local]]$p_inf,
+                   p_inf = p_inf,
                    gamma = 1 / combinations[[n_local]]$inf_period)
     })
     
@@ -134,4 +136,4 @@ for (n in seq_along(combinations)) {
   cat("  Done:", virus_name, "\n")
 }
 
-saveRDS(results_rt, file = here("inst", "outdata", "rt_13072026")) # change date as needed
+saveRDS(results_rt, file = here("inst", "outdata", "rt_04092026")) # change date as needed
