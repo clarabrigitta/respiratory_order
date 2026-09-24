@@ -19,6 +19,8 @@ library(tibble)
 library(patchwork)
 library(Rcpp)
 library(coda)
+library(data.table)
+library(qs)
 
 # helper for pathogen colours
 pathogen_cols <- c(
