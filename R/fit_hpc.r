@@ -53,14 +53,14 @@ week_group <- as.character(floor_date(dates_seq, unit = "week", week_start = 1))
 tots <- c(tot1, tot2, tot3, tot4, tot5, tot6, tot7, tot8, tot9)
 
 # indexing for parameters (to keep better track)
-idx <- list(det = 1:5, sus = 6:10, imm = 11, imp = 12)
+idx <- list(det = 1:5, sus = 6:10, imm = 11, imp = 12, pinf = 13)
 band_of_group <- c(1, 2, 2, 3, 3, 3, 4, 4, 5)   # 9 model groups -> 5 data bands
-u_idx <- c(idx$det, idx$sus, idx$imp)
+u_idx <- c(idx$det, idx$sus, idx$imp, idx$pinf)
 inc_cols <- 1 + 4 * 9 + seq_len(9)
 
 # model runner ----
 
-run_model_rcpp <- function(p_sus_bands, n, imm_days, imports = 1) {
+run_model_rcpp <- function(p_sus_bands, n, imm_days, imports = 1, p_inf) {
   sigma <- 1 / combinations[[n]]$inc_period
   gamma <- 1 / combinations[[n]]$inf_period
   bg    <- imports / sum(tots)
@@ -80,7 +80,7 @@ run_model_rcpp <- function(p_sus_bands, n, imm_days, imports = 1) {
                     parms = list(sigma = sigma,
                                  gamma = gamma,
                                  omega = 1 / imm_days,
-                                 p_inf = combinations[[n]]$p_inf,
+                                 p_inf = p_inf,
                                  bg    = bg,
                                  mu_b  = daily_births,
                                  mu_d  = hazard_death),
@@ -113,10 +113,11 @@ prior <- createPrior(
   sampler = function(n = 1) {
     u <- mapply(function(lo, hi) runif(n, lo, hi), lb[u_idx], ub[u_idx])
     d <- rlnorm(n, meanlog = imm_meanlog, sdlog = imm_sdlog)
-    if (n == 1) c(u[1:10], d, u[11]) else cbind(u[, 1:10], d, u[, 11])
+    # u columns follow u_idx: det(1-5), sus(6-10), log10_import, p_inf
+    if (n == 1) c(u[1:10], d, u[11:12]) else cbind(u[, 1:10], d, u[, 11:12])
   },
-  lower = c(lb[1:10], 0,   lb[12]),
-  upper = c(ub[1:10], Inf, ub[12])
+  lower = c(lb[1:10], 0,   lb[12:13]),
+  upper = c(ub[1:10], Inf, ub[12:13])
 )
 
 # poisson likelihood function
@@ -125,8 +126,9 @@ likelihood <- function(param) {
   p_sus_bands     <- param[idx$sus]
   imm_duration    <- param[idx$imm]
   imports         <- 10^param[idx$imp]
+  p_inf           <- param[idx$pinf]
 
-  model_out <- run_model_rcpp(p_sus_bands, n, imm_duration, imports)
+  model_out <- run_model_rcpp(p_sus_bands, n, imm_duration, imports, p_inf)
   expected_vec <- as.vector(model_out) * rep(detection_rates, each = nrow(model_out))
 
   ll <- sum(dpois(obs_vec, expected_vec, log = TRUE))
@@ -140,7 +142,7 @@ setup <- createBayesianSetup(likelihood = likelihood,
                              parallel = FALSE,
                              names = c(paste0("detection_", c("0to4", "5to14", "15to44", "45to64", "65plus")),
                                        paste0("sus_", c("0to4", "5to14", "15to44", "45to64", "65plus")),
-                                       "imm_duration", "log10_import"))
+                                       "imm_duration", "log10_import", "p_inf"))
 
 settings <- list(iterations = 500000, nrChains = 1, message = TRUE, burnin = 200000)
 

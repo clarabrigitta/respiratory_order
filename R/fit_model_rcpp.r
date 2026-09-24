@@ -49,9 +49,9 @@ week_group <- as.character(week_start)
 tots <- c(tot1, tot2, tot3, tot4, tot5, tot6, tot7, tot8, tot9)
 
 # indexing for parameters (to keep better track)
-idx <- list(det = 1:5, sus = 6:10, imm = 11, imp = 12)
+idx <- list(det = 1:5, sus = 6:10, imm = 11, imp = 12, pinf = 13)
 band_of_group <- c(1, 2, 2, 3, 3, 3, 4, 4, 5)   # 9 model groups -> 5 data bands
-u_idx <- c(idx$det, idx$sus, idx$imp)
+u_idx <- c(idx$det, idx$sus, idx$imp, idx$pinf)
 
 # incidence column positions in seirs_rcpp() output: time + 4 states x n_age, then inc1..inc9
 n_age_model <- 9
@@ -60,7 +60,7 @@ inc_cols <- 1 + 4 * n_age_model + seq_len(n_age_model)
 # C++-backed model runner ----
 
 # returns a matrix of weekly incidence counts (rows = weeks, cols = 5 age bands).
-run_model_rcpp <- function(p_sus_bands, n, imm_days, imports = 1) {
+run_model_rcpp <- function(p_sus_bands, n, imm_days, imports = 1, p_inf) {
   sigma <- 1 / combinations[[n]]$inc_period
   gamma <- 1 / combinations[[n]]$inf_period
   bg    <- imports / sum(tots)
@@ -84,7 +84,7 @@ run_model_rcpp <- function(p_sus_bands, n, imm_days, imports = 1) {
       sigma = sigma,
       gamma = gamma,
       omega = 1 / imm_days,
-      p_inf = combinations[[n]]$p_inf,
+      p_inf = p_inf,
       bg    = bg,
       mu_b  = daily_births,
       mu_d  = hazard_death
@@ -142,10 +142,11 @@ for (n in seq_along(combinations)) {
       sampler = function(n = 1) {
         u <- mapply(function(lo, hi) runif(n, lo, hi), lb[u_idx], ub[u_idx])
         d <- rlnorm(n, meanlog = imm_meanlog, sdlog = imm_sdlog)
-        if (n == 1) c(u[1:10], d, u[11]) else cbind(u[, 1:10], d, u[, 11])
+        # u columns follow u_idx: det(1-5), sus(6-10), log10_import, p_inf
+        if (n == 1) c(u[1:10], d, u[11:12]) else cbind(u[, 1:10], d, u[, 11:12])
         },
-      lower = c(lb[1:10], 0,   lb[12]),
-      upper = c(ub[1:10], Inf, ub[12])
+      lower = c(lb[1:10], 0,   lb[12:13]),
+      upper = c(ub[1:10], Inf, ub[12:13])
     )
 
     likelihood <- function(param) {
@@ -153,8 +154,9 @@ for (n in seq_along(combinations)) {
       p_sus_bands     <- param[idx$sus]
       imm_duration    <- param[idx$imm]
       imports         <- 10^param[idx$imp]
+      p_inf           <- param[idx$pinf]
 
-      model_out <- run_model_rcpp(p_sus_bands, n_local, imm_duration, imports)
+      model_out <- run_model_rcpp(p_sus_bands, n_local, imm_duration, imports, p_inf)
 
       expected_vec <- as.vector(model_out) *
         rep(detection_rates, each = nrow(model_out))
@@ -170,7 +172,7 @@ for (n in seq_along(combinations)) {
       parallel = FALSE,
       names = c(paste0("detection_", c("0to4","5to14","15to44","45to64","65plus")),
                 paste0("sus_",       c("0to4","5to14","15to44","45to64","65plus")),
-                "imm_duration", "log10_import")
+                "imm_duration", "log10_import", "p_inf")
     )
 
     set.seed(24)
@@ -187,7 +189,7 @@ for (n in seq_along(combinations)) {
   cat("Done:", virus_name, "-", format(Sys.time(), "%H:%M:%S"), "\n")
 }
 
-saveRDS(results, file = here("inst", "outdata", "parameters_12082026")) # change date as needed
+saveRDS(results, file = here("inst", "outdata", "parameters_04092026")) # change date as needed
 
 # manual diagnostic checks ----
 summary(results[["RSV"]])
