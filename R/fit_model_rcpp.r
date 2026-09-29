@@ -4,7 +4,7 @@ source(here("R", "model_rcpp.r"))
 
 ## fit window
 fit_start <- as.Date("2020-03-23")
-fit_end   <- as.Date("2022-03-02")   # <- fit only up to 2 January 2022 (original is 2 March 2022)
+fit_end   <- as.Date("2022-03-02")
 times <- seq(0, as.integer(fit_end - fit_start), by = 1)
 
 ## pre-flatten contact matrices once
@@ -28,8 +28,6 @@ data <- read_csv("inst/data/cases_all_respiratory_pathogens_by_agegroup_sex_2025
          !AgeGroup %in% c("Total", "Unknown"),
          !Pathogen %in% c("Influenza (All)", "COVID-19", "Mycoplasma pneumoniae")) %>%
   mutate(WeekBeginning = as.Date(as.character(WeekBeginning), format = "%Y%m%d")) %>%
-  # filter(WeekBeginning >= as.Date("2020-03-23"),
-  #        WeekBeginning <= as.Date("2022-03-02")) %>%
   filter(WeekBeginning >= fit_start,
          WeekBeginning <= fit_end) %>%
   pivot_wider(names_from = AgeGroup, values_from = NumberCasesPerWeek) %>%
@@ -39,21 +37,18 @@ data <- read_csv("inst/data/cases_all_respiratory_pathogens_by_agegroup_sex_2025
   arrange(WeekBeginning) %>%
   select(Pathogen, "0 to 4", "5 to 14", "15 to 44", "45 to 64", "65+")
 
-# dates_seq <- seq.Date(as.Date("2020-03-23"), as.Date("2022-03-02"), by = 1)
 dates_seq <- seq.Date(fit_start, fit_end, by = 1)
 week_start <- floor_date(dates_seq, unit = "week", week_start = 1)
-# pre-coerced grouping for rowsum(): avoids re-coercing Dates on every likelihood call.
-# character (not factor) so the rownames stay date strings for downstream as.Date()
 week_group <- as.character(week_start)
 
 tots <- c(tot1, tot2, tot3, tot4, tot5, tot6, tot7, tot8, tot9)
 
-# indexing for parameters (to keep better track)
+## indexing for parameters (to keep better track)
 idx <- list(det = 1:5, sus = 6:10, imm = 11, imp = 12, pinf = 13)
 band_of_group <- c(1, 2, 2, 3, 3, 3, 4, 4, 5)   # 9 model groups -> 5 data bands
 u_idx <- c(idx$det, idx$sus, idx$imp, idx$pinf)
 
-# incidence column positions in seirs_rcpp() output: time + 4 states x n_age, then inc1..inc9
+## incidence column positions in seirs_rcpp() output: time + 4 states x n_age, then inc1..inc9
 n_age_model <- 9
 inc_cols <- 1 + 4 * n_age_model + seq_len(n_age_model)
 
@@ -92,7 +87,7 @@ run_model_rcpp <- function(p_sus_bands, n, imm_days, imports = 1, p_inf) {
     contacts_prepped = contacts_prepped
   )
 
-  daily_inc <- out[, inc_cols, drop = FALSE]   # inc_cols precomputed at module level
+  daily_inc <- out[, inc_cols, drop = FALSE]
 
   # aggregate age groups to match observed data
   daily_agg <- cbind(
@@ -122,8 +117,6 @@ for (n in seq_along(combinations)) {
   local({
     n_local <- n
     data_local <- subdata
-    # observed counts flattened once, before rebuilt from the tibble on every
-    # likelihood call (saves time)
     obs_vec <- as.vector(as.matrix(subdata[, -1]))
 
     lb <- combinations[[n_local]]$lb

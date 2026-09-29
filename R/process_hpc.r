@@ -7,7 +7,7 @@ source(here("R", "create_combinations.r"))
 combinations <- create_combinations()
 
 # folder the HPC job wrote to, i.e. the date the fit was run
-date <- "12082026"
+date <- format(Sys.Date(), "%d%m%Y")
 
 files <- here("inst", "outdata", date, paste0("out", seq_along(combinations), ".rds"))
 

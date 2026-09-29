@@ -7,7 +7,7 @@
 #                (explore_contacts.r line 295)
 
 plot_traj_age <- function(results_traj, data, combined, age_groups, pathogen_map,
-                          outdir = here("inst", "plots")) {
+                          outdir = here("inst", "plots", date)) {
 
   plots <- list()
 

@@ -5,25 +5,19 @@
 
 source(here::here("R", "library_and_scripts.r"))
 
-# contact matrices: Scotland-only CoMix subset (from explore_contacts.r) ----
-#
-# The UK-wide pipeline this replaces is kept, commented out, at the end of this
-# section. Object names are unchanged (fortnight_survey, fortnight_matrix,
-# age_limits), so nothing downstream needs editing -- only the contents differ.
+# contact matrices: Scotland-only CoMix subset ----
+# The UK-wide pipeline is commented out, at the end of this section.
 
 age_limits <- c(0, 5, 11, 15, 25, 35, 45, 55, 65)
 
-## the model window, expressed as the fortnight labels model_rcpp.r builds in
-## `dates`. Scotland CoMix runs two waves past the window (Nov 2022), so the
-## matrix list is keyed on these labels and trimmed to them, keeping the
-## positional lookup in model_rcpp.r (dates$fortnight_n) aligned with the list
+## define time period of model
 fit_start   <- as.Date("2020-03-23")
 fit_end     <- as.Date("2022-03-02")
 window_days <- seq(fit_start, fit_end, by = 1)
 window_fortnights <- unique(paste(isoyear(window_days), "/",
                                   sprintf("%02d", ceiling(isoweek(window_days) / 2))))
 
-## raw CoMix tables, read locally (replaces the zenodo get_survey() call)
+## raw CoMix tables
 part     <- qread(here("inst", "data", "dt_comix_share", "part.qs"))
 contacts <- qread(here("inst", "data", "dt_comix_share", "contacts.qs"))
 
@@ -44,12 +38,6 @@ contacts_scotland <- contacts_scotland[
   nth_cnt := seq_len(.N), by = part_wave_uid][nth_cnt <= trim_n]
 
 ## socialmixr expects one row per participant, so part_wave_uid becomes part_id.
-## Ages are handed over as part_age_exact plus estimated bounds rather than as a
-## part_age string for clean() to re-parse. clean() regenerates (and clobbers)
-## part_age_est_min/max whenever a part_age column is present, so part_age is
-## dropped here and these columns are left to pass through untouched. Exact ages
-## go in part_age_exact; participants who only gave a range keep that range in
-## the bounds, so assign_age_groups() can impute or sample from it.
 part_sm <- part_scotland %>%
   select(part_id = part_wave_uid,
          part_age, part_age_group, part_age_est_min, part_age_est_max,
@@ -63,7 +51,10 @@ part_sm <- part_scotland %>%
          dayofweek = match(weekday, c("Sunday", "Monday", "Tuesday", "Wednesday",
                                       "Thursday", "Friday", "Saturday")) - 1L,
          fortnight = paste(isoyear(date), "/", sprintf("%02d", ceiling(isoweek(date) / 2)))) %>%
-  select(-part_age)
+  select(-part_age) %>%
+  group_by(fortnight) %>%
+  mutate(mid_date = min(date) + floor((max(date) - min(date))/2)) %>%
+  ungroup()
 
 contacts_sm <- contacts_scotland %>%
   select(part_id = part_wave_uid,
@@ -74,8 +65,42 @@ contacts_sm <- contacts_scotland %>%
          cnt_age_est_max = as.numeric(cnt_age_est_max),
          cnt_age_exact = NA_integer_)
 
-## Scottish population for survey.pop (the socialmixr default weights to the
-## whole UK, via the country column)
+## fortnightly mean number of contacts for Scotland CoMix (total and by age group)
+n_contacts <- contacts_sm %>%
+  group_by(part_id) %>%
+  summarise(n_contacts = n())
+
+combined <- part_sm %>%
+  left_join(n_contacts, join_by(part_id)) %>%
+  mutate(n_contacts = replace_na(n_contacts, 0)) %>% 
+  filter(!is.na(part_age_group)) %>% 
+  mutate(agegp = case_when(part_age_group %in% c("0-4") ~ "0 to 4",
+                           part_age_group %in% c("5-11", "12-17") ~ "5 to 14", #"12-17"
+                           part_age_group %in% c("12-17", "18-29", "30-39", "40-49") ~ "15 to 44", #"40-49"
+                           part_age_group %in% c("40-49", "50-59", "60-69") ~ "45 to 64", #"60-69"
+                           part_age_group %in% c("60-69", "70-120") ~ "65+")) %>% 
+  mutate(agegp = factor(agegp,
+                        levels = c("0 to 4", "5 to 14", "15 to 44", "45 to 64", "65+")))
+
+dates <- data.frame(date = seq(from = as.Date("23-03-2020", format = "%d-%m-%Y"), to = as.Date("02-03-2022", format = "%d-%m-%Y"), by = "day")) %>% 
+  mutate(fortnight = paste(isoyear(date), "/", sprintf("%02d", ceiling(isoweek(date)/2))),
+         mmyyyy = format(date, "%m/%Y"),
+         quarter = quarters(date))
+
+mean_total_scotland <- combined %>%
+  group_by(fortnight, mid_date) %>%
+  summarise(mean_contacts = mean(n_contacts), n_part = n()) %>%
+  ungroup() %>%
+  arrange(mid_date) %>% 
+  left_join(dates, by = "fortnight")
+
+mean_age_scotland <- combined %>%
+  group_by(fortnight, mid_date, agegp) %>%
+  summarise(mean_contacts = mean(n_contacts), n_part = n()) %>%
+  ungroup() %>% 
+  left_join(dates, by = "fortnight")
+
+## Scottish population for survey.pop
 pop_raw <- read_excel(here("inst", "data", "mid-year-population-estimates-time-series-data.xlsx"),
                       sheet = "Table 1", skip = 5)
 
@@ -93,9 +118,6 @@ survey_pop <- data.frame(age = limits_to_age_groups(scot_pop$age, notation = "br
                          population = scot_pop$population)
 
 ## create surveys split by fortnight
-## splitting on the fortnight label (rather than mid_date) names the list with
-## the same labels dates$fortnight carries in model_rcpp.r, so the order is
-## chronological and can be checked against the window below
 part_split <- split(part_sm, part_sm$fortnight)
 
 fortnight_survey <- lapply(part_split, function(p) {
@@ -115,8 +137,7 @@ fortnight_matrix <- lapply(fortnight_survey, function(s) {
                       missing_contact_age = "remove") %>%
     weigh_by_dayofweek() %>%
     compute_matrix()
-  ## a handful of early/sparse fortnights have zero child participants, leaving
-  ## NA rows/cols; symmetrise() refuses those, so leave them unsymmetrised here
+  ## some fortnights have zero child participants, leave them unsymmetrised here
   ## and patch them below
   if (anyNA(m$matrix)) m else symmetrise(m, survey_pop = align_ages(survey_pop, m))
 })
@@ -141,12 +162,10 @@ for (fn in names(patch)) {
 stopifnot(all(window_fortnights %in% names(fortnight_matrix)))
 fortnight_matrix <- fortnight_matrix[window_fortnights]
 
-## model_rcpp.r indexes this list positionally through dates$fortnight_n, so it
-## has to be exactly the window's fortnights, in chronological order
 stopifnot(identical(names(fortnight_matrix), window_fortnights),
           !any(vapply(fortnight_matrix, function(m) anyNA(m$matrix), logical(1))))
 
-## superseded: UK-wide CoMix pipeline ----
+## UK-wide CoMix pipeline ----
 ## uncomment this block (and comment out the Scotland block above) to rebuild
 ## hpc_inputs.rds from the UK-wide matrices instead
 ##
@@ -213,7 +232,7 @@ stopifnot(identical(names(fortnight_matrix), window_fortnights),
 #
 # stopifnot(!any(vapply(fortnight_matrix, function(m) anyNA(m$matrix), logical(1))))
 
-# population and births (from explore_scotland.r) ----
+# population and births ----
 
 scot_population <- read_excel(here("inst", "data", "mid-year-population-estimates-time-series-data.xlsx"),
                               sheet = "Table 1", skip = 5) %>%
@@ -253,7 +272,9 @@ dir.create(here("inst", "outdata"), showWarnings = FALSE, recursive = TRUE)
 saveRDS(list(fortnight_matrix = fortnight_matrix,
              scot_population  = scot_population,
              scot_births      = scot_births,
-             age_limits       = age_limits),
+             age_limits       = age_limits,
+             mean_total_scotland = mean_total_scotland,
+             mean_age_scotland = mean_age_scotland),
         file = here("inst", "outdata", "hpc_inputs.rds"))
 
 cat("wrote inst/outdata/hpc_inputs.rds:",

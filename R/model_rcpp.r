@@ -27,16 +27,12 @@ prepare_contacts_cpp <- function(fortnight_matrix, fortnight_lookup) {
   n_fn  <- length(fortnight_matrix)
   n_age <- 9L
   
-  # Stack matrices row-major (transpose before as.vector because R is column-major)
   contacts_flat <- numeric(n_fn * n_age * n_age)
   for (i in seq_len(n_fn)) {
     mat <- fortnight_matrix[[i]]$matrix
     contacts_flat[((i - 1L) * 81L + 1L):(i * 81L)] <- as.vector(t(mat))
   }
   
-  # fn_at_day[d] (0-indexed d = day) = fortnight index (1-based)
-  # fortnight_lookup[findInterval(t, 0:709)] = fortnight_lookup[t+1] for t in 0:708
-  # so fn_at_day is just fortnight_lookup as an integer vector
   fn_at_day <- as.integer(fortnight_lookup)
   
   list(contacts_flat = contacts_flat, fn_at_day = fn_at_day)
@@ -232,7 +228,7 @@ NumericMatrix seirs_ode_rcpp(
 ')
 
 # run C++ SEIRS ODE solver.
-# returns a matrix with the same column layout as deSolve::ode():
+# returns a matrix with the same column layout as deSolve::ode()
 seirs_rcpp <- function(y0, times, parms, contacts_prepped, a_vec_in = a_vec) {
   out <- seirs_ode_rcpp(
     y0            = as.numeric(y0),
