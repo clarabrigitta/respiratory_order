@@ -1,9 +1,9 @@
 # Panel plot of Rt trajectories for all viruses.
-# Saves inst/plots/rt_<date>.png and returns the patchwork object.
+# Saves <outdir>/rt_<date>.png and returns the patchwork object.
 #
 # results_rt : list of Rt trajectories, one element per virus (process_outputs.r)
 
-plot_rt <- function(results_rt, outdir = here("inst", "plots")) {
+plot_rt <- function(results_rt, outdir = here("inst", "plots"), date = format(Sys.Date(), "%d%m%Y")) {
 
   plots <- list()
 
@@ -40,7 +40,7 @@ plot_rt <- function(results_rt, outdir = here("inst", "plots")) {
     plot_layout(guides = "collect") &
     theme(legend.position = "bottom")
 
-  ggsave(filename = file.path(outdir, paste0("rt_", format(Sys.Date(), "%d%m%Y"), ".png")),
+  ggsave(filename = file.path(outdir, paste0("rt_", date, ".png")),
          plot = fig_rt, width = 15, height = 9, dpi = 300)
 
   fig_rt

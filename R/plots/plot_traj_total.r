@@ -1,5 +1,5 @@
 # Panel plot of total (all ages summed) case trajectories for all pathogens.
-# Saves inst/plots/traj_all_<date>.png and returns the patchwork object.
+# Saves <outdir>/traj_all_<date>.png and returns the patchwork object.
 #
 # results_traj : list of posterior trajectories, one element per virus (process_outputs.r)
 # data         : weekly case counts, wide by age group (see plot_summary.r)
@@ -7,7 +7,7 @@
 #                (explore_contacts.r line 271)
 
 plot_traj_total <- function(results_traj, data, combined, age_groups, pathogen_map,
-                            outdir = here("inst", "plots", date)) {
+                            outdir = here("inst", "plots", date), date = format(Sys.Date(), "%d%m%Y")) {
 
   plots <- list()
 
@@ -62,7 +62,7 @@ plot_traj_total <- function(results_traj, data, combined, age_groups, pathogen_m
     plot_layout(guides = "collect") &
     theme(legend.position = "bottom")
 
-  ggsave(filename = file.path(outdir, paste0("traj_all_", format(Sys.Date(), "%d%m%Y"), ".png")),
+  ggsave(filename = file.path(outdir, paste0("traj_all_", date, ".png")),
          plot = fig_traj, width = 15, height = 9, dpi = 300)
 
   fig_traj

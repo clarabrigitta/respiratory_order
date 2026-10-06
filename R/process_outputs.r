@@ -1,7 +1,7 @@
 source(here::here("R", "library_hpc.r"))
 
-# define date for file saving
-date <- format(Sys.Date(), "%d%m%Y")
+# define date for file saving: the run date set in inst/bash/run.sh (today if run without it)
+date <- Sys.getenv("RUN_DATE", format(Sys.Date(), "%d%m%Y"))
 
 # fixed inputs built by R/prepare_inputs.r
 inputs <- readRDS(here("inst", "outdata", "hpc_inputs.rds"))

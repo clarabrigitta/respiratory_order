@@ -10,8 +10,8 @@ combinations <- create_combinations()
 scenario_names <- sapply(combinations, function(x) x$scenario)
 scenario <- unique(scenario_names)[as.integer(Sys.getenv("SLURM_ARRAY_TASK_ID", "1"))]
 
-# folder the HPC job wrote to, i.e. the date the fit was run
-date <- format(Sys.Date(), "%d%m%Y")
+# folder the HPC job wrote to: the run date set in inst/bash/run.sh (today if run without it)
+date <- Sys.getenv("RUN_DATE", format(Sys.Date(), "%d%m%Y"))
 
 files <- here("inst", "outdata", date, paste0("out", which(scenario_names == scenario), ".rds"))
 
