@@ -6,12 +6,16 @@ source(here("R", "create_combinations.r"))
 
 combinations <- create_combinations()
 
+# scenario to process: array task i -> i-th scenario (first one if run locally)
+scenario_names <- sapply(combinations, function(x) x$scenario)
+scenario <- unique(scenario_names)[as.integer(Sys.getenv("SLURM_ARRAY_TASK_ID", "1"))]
+
 # folder the HPC job wrote to, i.e. the date the fit was run
 date <- format(Sys.Date(), "%d%m%Y")
 
-files <- here("inst", "outdata", date, paste0("out", seq_along(combinations), ".rds"))
+files <- here("inst", "outdata", date, paste0("out", which(scenario_names == scenario), ".rds"))
 
 results <- lapply(files, readRDS)
-names(results) <- sapply(combinations, function(x) x$name)
+names(results) <- sapply(combinations[scenario_names == scenario], function(x) x$name)
 
-saveRDS(results, file = here("inst", "outdata", paste0("parameters_", date)))
+saveRDS(results, file = here("inst", "outdata", date, paste0("parameters_", date, "_", scenario)))

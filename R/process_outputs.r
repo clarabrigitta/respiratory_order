@@ -11,6 +11,11 @@ scot_births      <- inputs$scot_births
 
 source(here("R", "model_rcpp.r"))
 
+# scenario to process: array task i -> i-th scenario (first one if run locally)
+scenario_names <- sapply(combinations, function(x) x$scenario)
+scenario <- unique(scenario_names)[as.integer(Sys.getenv("SLURM_ARRAY_TASK_ID", "1"))]
+combinations <- combinations[scenario_names == scenario]
+
 # helpers ----
 fit_start <- as.Date("2020-03-23")
 fit_end   <- as.Date("2022-03-02")
@@ -54,18 +59,21 @@ run_model_rcpp <- function(p_sus_bands, n, imm_days, imports = 1, p_inf) {
   y0 <- setNames(as.vector(y0_mat),
                  paste0(rep(c("S", "E", "I", "R"), 9), rep(1:9, each = 4)))
   
-  out <- seirs_rcpp(y0 = y0,
-                    times = times,
-                    parms = list(sigma = sigma,
-                                 gamma = gamma,
-                                 omega = 1 / imm_days,
-                                 p_inf = p_inf,
-                                 bg    = bg,
-                                 mu_b  = daily_births,
-                                 mu_d  = hazard_death),
-                    contacts_prepped = contacts_prepped)
-  
-  daily_inc <- out[, inc_cols, drop = FALSE]
+  seirs_rcpp(y0 = y0,
+             times = times,
+             parms = list(sigma = sigma,
+                          gamma = gamma,
+                          omega = 1 / imm_days,
+                          p_inf = p_inf,
+                          bg    = bg,
+                          mu_b  = daily_births,
+                          mu_d  = hazard_death),
+             contacts_prepped = contacts_prepped)
+}
+
+# aggregate daily incidence to 5 data bands by week
+weekly_incidence <- function(ode_out) {
+  daily_inc <- ode_out[, inc_cols, drop = FALSE]
   
   daily_agg <- cbind(daily_inc[, 1],
                      daily_inc[, 2] + daily_inc[, 3],
@@ -76,132 +84,61 @@ run_model_rcpp <- function(p_sus_bands, n, imm_days, imports = 1, p_inf) {
   rowsum(daily_agg, week_group)
 }
 
+# Rt calculation ----
+S_cols <- seq(2, 34, by = 4)
+C_by_day <- lapply(fortnight_lookup, function(f) fortnight_matrix[[f]]$matrix)
+
+calculate_rt <- function(ode_out, p_inf, gamma) {
+  S <- ode_out[, S_cols, drop = FALSE]
+  N <- S + ode_out[, S_cols + 1] + ode_out[, S_cols + 2] + ode_out[, S_cols + 3]
+  scale <- p_inf / gamma
+  
+  # K[i,j] = C[i,j] * S[i] / N[j] * p_inf / gamma
+  rt_vec <- vapply(seq_len(nrow(ode_out)), function(d) {
+    K <- scale * S[d, ] * t(t(C_by_day[[d]]) / N[d, ])
+    max(Mod(eigen(K, symmetric = FALSE, only.values = TRUE)$values))
+  }, numeric(1))
+  
+  data.frame(time = ode_out[, "time"], rt = rt_vec, date = dates_seq)
+}
+
 # run with posterior samples ----
 
 results_traj <- list()
+results_rt   <- list()
 
 ## load model fit output
-results <- readRDS(file = here("inst", "outdata", paste0("parameters_", date))) # change date if needed
+results <- readRDS(file = here("inst", "outdata", date, paste0("parameters_", date, "_", scenario))) # change date if needed
 
 for (n in seq_along(combinations)) {
   virus_name <- combinations[[n]]$name
-  pathogen_name <- pathogen_map[[virus_name]]
-  cat("Trajectory", n, ":", virus_name)
+  cat("Trajectory + Rt", n, ":", virus_name)
   
-  local({
-    n_local <- n
-    posterior <- getSample(results[[n_local]], start = 3, thin = 10000)
+  posterior <- getSample(results[[n]], start = 3, thin = 1000)
+  gamma <- 1 / combinations[[n]]$inf_period
+  
+  out <- lapply(seq_len(nrow(posterior)), function(r) {
+    detection_rates <- posterior[r, idx$det]
+    p_inf           <- posterior[r, idx$pinf]
     
-    traj <- lapply(seq_len(nrow(posterior)), function(r) {
-      detection_rates <- posterior[r, idx$det]
-      p_sus_bands     <- posterior[r, idx$sus]
-      imm_duration    <- posterior[r, idx$imm]
-      imports         <- 10^posterior[r, idx$imp]
-      p_inf           <- posterior[r, idx$pinf]
-      
-      model_out <- run_model_rcpp(p_sus_bands, n_local, imm_duration, imports, p_inf)
-      expected_out <- sweep(model_out, 2, detection_rates, `*`)
-      colnames(expected_out) <- c("0 to 4", "5 to 14", "15 to 44", "45 to 64", "65+")
-      expected_out
-    })
+    ode_out <- run_model_rcpp(p_sus_bands = posterior[r, idx$sus],
+                              n           = n,
+                              imm_days    = posterior[r, idx$imm],
+                              imports     = 10^posterior[r, idx$imp],
+                              p_inf       = p_inf)
     
-    results_traj[[virus_name]] <<- traj
+    expected_out <- sweep(weekly_incidence(ode_out), 2, detection_rates, `*`)
+    colnames(expected_out) <- c("0 to 4", "5 to 14", "15 to 44", "45 to 64", "65+")
+    
+    list(traj = expected_out,
+         rt   = calculate_rt(ode_out, p_inf = p_inf, gamma = gamma))
   })
+  
+  results_traj[[virus_name]] <- lapply(out, `[[`, "traj")
+  results_rt[[virus_name]]   <- lapply(out, `[[`, "rt")
   
   cat("  Done:", virus_name, "\n")
 }
 
-saveRDS(results_traj, file = here("inst", "outdata", paste0("traj_", date))) # change date as needed
-
-# Rt calculation ----
-## date data frame for assistance/reference
-dates <- data.frame(date = seq(fit_start, fit_end, 1)) %>%
-  mutate(time = 0:(n()-1),
-         fortnight = paste(isoyear(date), "/", sprintf("%02d", ceiling(isoweek(date)/2))),
-         mmyyyy = format(date, "%m/%Y"),
-         quarter = quarters(date)) %>% 
-  mutate(fortnight_n = as.integer(factor(fortnight)))
-
-calculate_rt <- function(ode_out, p_inf, gamma, dates_df = dates) {
-  t_vec <- ode_out[, "time"]
-  
-  rt_vec <- vapply(seq_along(t_vec), function(i) {
-    t <- t_vec[i]
-    
-    S <- ode_out[i, seq(2, 34, by = 4)]
-    E <- ode_out[i, seq(3, 35, by = 4)]
-    I <- ode_out[i, seq(4, 36, by = 4)]
-    R <- ode_out[i, seq(5, 37, by = 4)]
-    N <- S + E + I + R
-    
-    C <- c_t(t)
-    
-    K <- outer(1:9, 1:9, function(i_id, j_id) {
-      C[cbind(i_id, j_id)] * p_inf * S[i_id] / (N[j_id] * gamma)
-    })
-    
-    Re(eigen(K, only.values = TRUE)$values[1])
-  }, numeric(1))
-  
-  data.frame(time = t_vec, rt = rt_vec) %>%
-    left_join(dates_df, by = "time")
-}
-
-results_rt <- list()
-
-for (n in seq_along(combinations)) {
-  virus_name <- combinations[[n]]$name
-  pathogen_name <- pathogen_map[[virus_name]]
-  cat("Rt trajectory", n, ":", virus_name)
-  
-  local({
-    n_local <- n
-    posterior <- getSample(results[[n_local]], start = 3, thin = 10000)
-    
-    rt_traj <- lapply(seq_len(nrow(posterior)), function(r) {
-      p_sus_bands  <- posterior[r, idx$sus]
-      imm_duration <- posterior[r, idx$imm]
-      imports      <- 10^posterior[r, idx$imp]
-      p_inf        <- posterior[r, idx$pinf]
-      
-      sigma <- 1 / combinations[[n_local]]$inc_period
-      gamma <- 1 / combinations[[n_local]]$inf_period
-      bg    <- imports / sum(tots)
-      
-      R_init <- tots * (1 - p_sus_bands[band_of_group])
-      S_init <- tots - R_init
-      E_init <- bg * S_init / sigma
-      I_init <- bg * S_init / gamma
-      
-      y0_mat <- rbind(S = S_init - E_init - I_init, E = E_init,
-                      I = I_init, R = R_init)
-      y0 <- setNames(as.vector(y0_mat),
-                     paste0(rep(c("S", "E", "I", "R"), 9), rep(1:9, each = 4)))
-      
-      ode_out <- seirs_rcpp(
-        y0  = y0,
-        times = times,
-        parms = list(
-          sigma = 1 / combinations[[n_local]]$inc_period,
-          gamma = 1 / combinations[[n_local]]$inf_period,
-          omega = 1 / imm_duration,
-          p_inf = p_inf,
-          bg = bg,
-          mu_b = daily_births,
-          mu_d = hazard_death
-        ),
-        contacts_prepped = contacts_prepped
-      )
-      
-      calculate_rt(ode_out,
-                   p_inf = p_inf,
-                   gamma = 1 / combinations[[n_local]]$inf_period)
-    })
-    
-    results_rt[[virus_name]] <<- rt_traj
-  })
-  
-  cat("  Done:", virus_name, "\n")
-}
-
-saveRDS(results_rt, file = here("inst", "outdata", paste0("rt_", date))) # change date as needed
+saveRDS(results_traj, file = here("inst", "outdata", date, paste0("traj_", date, "_", scenario))) # change date as needed
+saveRDS(results_rt,   file = here("inst", "outdata", date, paste0("rt_", date, "_", scenario)))   # change date as needed
