@@ -154,11 +154,13 @@ results <- mclapply(1:4,
                     function(x) {
                       runMCMC(bayesianSetup = setup, sampler = "DEzs", settings = settings)
                     },
-                    mc.cores = 4)
+                    mc.cores = as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", "4")))
 
 out <- createMcmcSamplerList(results)
 
-dir.create(here("inst", "outdata", format(Sys.Date(), "%d%m%Y")), recursive = TRUE, showWarnings = FALSE)
-saveRDS(out, file = here("inst", "outdata", format(Sys.Date(), "%d%m%Y"), paste0("out", n, ".rds")))
+# folder named by the run date set in inst/bash/run.sh (today if run without it)
+date <- Sys.getenv("RUN_DATE", format(Sys.Date(), "%d%m%Y"))
+dir.create(here("inst", "outdata", date), recursive = TRUE, showWarnings = FALSE)
+saveRDS(out, file = here("inst", "outdata", date, paste0("out", n, ".rds")))
 
 print(paste("end iteration number", n, virus_name, "time:", Sys.time()))
