@@ -1,0 +1,35 @@
+/* correlation plots: two per row inside the accordion
+   (override bslib's html-fill-container flex layout) */
+.accordion-body.corr-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+.accordion-body.corr-grid img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: none;
+}
+
+/* column-title row: show the card headers only */
+.col-titles .card:not(.toggle-card) .card-body { display: none; }
+.toggle-card .card-body {
+  display: block !important;
+  padding: 0.4rem 0.75rem;
+}
+.view-toggle {
+  display: inline-flex !important;
+  flex-direction: row !important;
+}
+
+/* second column: show MCMC traces or prior/posterior, set by the toggle */
+.view-mcmc, .view-pp { height: 100%; }
+.view-mcmc img, .view-pp img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.view-pp { display: none; }
+.show-pp .view-pp { display: block; }
+.show-pp .view-mcmc { display: none; }
